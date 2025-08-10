@@ -8,12 +8,12 @@ import {
 
 // 🔐 NEW CONFIG from your new Firebase project
 export const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyA33va8PBth6HP7r1clA8QVvO08axEaOLo",
+  authDomain: "japan2025-92e9d.firebaseapp.com",
+  projectId: "japan2025-92e9d",
+  storageBucket: "japan2025-92e9d.firebasestorage.app",
+  messagingSenderId: "740917127797",
+  appId: "1:740917127797:web:4be3c227b0287e2624263c"
 };
 
 export const app = initializeApp(firebaseConfig);
