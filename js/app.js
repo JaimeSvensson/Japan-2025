@@ -1,4 +1,35 @@
-// js/app.js — FINAL router hotfix
+==============================
+= Firestore Rules (paste & Publish)
+==============================
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAuthed() { return request.auth != null; }
+    function isMember(tripId) {
+      return isAuthed() &&
+        get(/databases/$(database)/documents/trips/$(tripId)).data.members.hasAny([request.auth.uid]);
+    }
+
+    match /trips/{tripId} {
+      // Create allowed if creator includes themself as a member
+      allow create: if isAuthed() && request.resource.data.members.hasAny([request.auth.uid]);
+      // Read & update only for members
+      allow read, update: if isMember(tripId);
+      // Delete only for admins
+      allow delete: if isMember(tripId) && get(resource.path).data.admins.hasAny([request.auth.uid]);
+
+      match /{document=**} {
+        allow read, write: if isMember(tripId);
+      }
+    }
+  }
+}
+
+
+==============================
+= js/app.js — add error handling for read/write
+==============================
 import { auth, db } from './firebase.js';
 import {
   onAuthStateChanged,
@@ -23,7 +54,6 @@ import {
 
 const view = document.getElementById('view');
 
-// ---- Router (robust) ----
 const routes = {
   '/login': renderLogin,
   '/trips': authGuard(renderTrips),
@@ -31,20 +61,17 @@ const routes = {
 };
 
 function parseRoute(){
-  // Examples handled: "#/trips", "#trips", "trips", "//#/trips?x=1"
   const raw = (location.hash || '#/login').replace(/^#+/, '');
   const [pathRaw, qsRaw] = raw.split('?');
-  const normalized = '/' + pathRaw.replace(/^\/*/, ''); // ensure single leading '/'
+  const normalized = '/' + pathRaw.replace(/^\/*/, '');
   return { path: normalized, qs: new URLSearchParams(qsRaw) };
 }
-
 function navigate(){
   const { path, qs } = parseRoute();
   (routes[path] || renderNotFound)({ qs });
 }
 window.addEventListener('hashchange', navigate);
 
-// Auth state → show user + guard
 onAuthStateChanged(auth, (user) => {
   const userArea = document.getElementById('userArea');
   const userName = document.getElementById('userName');
@@ -138,11 +165,14 @@ function renderTrips(){
         <button id="newTripBtn" class="px-3 py-2 rounded-xl bg-black text-white">Ny resa</button>
       </div>
       <ul id="tripList" class="grid gap-2"></ul>
+      <p id="tripMsg" class="text-sm text-red-600"></p>
     </section>`;
 
   const list = wrap.querySelector('#tripList');
+  const msg = wrap.querySelector('#tripMsg');
   const uid = auth.currentUser.uid;
 
+  // Read with error handler (e.g. permission-denied if rules missing)
   const qTrips = query(collection(db, 'trips'), where('members', 'array-contains', uid));
   const unsub = onSnapshot(qTrips, (snap) => {
     list.innerHTML = '';
@@ -168,38 +198,55 @@ function renderTrips(){
       list.appendChild(li);
     });
 
+    // Wire invite buttons
     list.querySelectorAll('.copyInvite').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const id = e.currentTarget.getAttribute('data-id');
-        const ref = doc(db, 'trips', id);
-        const snap2 = await getDoc(ref);
-        const t = snap2.data();
-        let token = t.inviteToken;
-        if (!token) {
-          token = randomToken();
-          await updateDoc(ref, { inviteToken: token, updatedAt: serverTimestamp() });
+        try {
+          const id = e.currentTarget.getAttribute('data-id');
+          const ref = doc(db, 'trips', id);
+          const snap2 = await getDoc(ref);
+          const t = snap2.data();
+          let token = t.inviteToken;
+          if (!token) {
+            token = randomToken();
+            await updateDoc(ref, { inviteToken: token, updatedAt: serverTimestamp() });
+          }
+          const inviteUrl = `${location.origin}${location.pathname}#/join?trip=${id}&token=${token}`;
+          await navigator.clipboard.writeText(inviteUrl);
+          alert('Inbjudningslänk kopierad!\n' + inviteUrl);
+        } catch (err) {
+          msg.textContent = err.message;
+          console.error(err);
         }
-        const inviteUrl = `${location.origin}${location.pathname}#/join?trip=${id}&token=${token}`;
-        await navigator.clipboard.writeText(inviteUrl);
-        alert('Inbjudningslänk kopierad!\n' + inviteUrl);
       });
     });
+  }, (err) => {
+    console.error('Trips read error:', err);
+    msg.textContent = `${err.code || 'error'} – ${err.message}`;
   });
 
+  // Create new trip with error handling
   wrap.querySelector('#newTripBtn').addEventListener('click', async () => {
-    const name = prompt('Resans namn? (ex. Tokyo & Kansai – Sep/Oct 2025)');
-    if (!name) return;
-    const currency = prompt('Standardvaluta? Skriv SEK eller JPY', 'SEK')?.toUpperCase() === 'JPY' ? 'JPY' : 'SEK';
-    const timezone = 'Asia/Tokyo';
-    const token = randomToken();
-    await addDoc(collection(db, 'trips'), {
-      name, currency, timezone,
-      admins: [uid],
-      members: [uid],
-      inviteToken: token,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
+    msg.textContent = '';
+    try {
+      const name = prompt('Resans namn? (ex. Tokyo & Kansai – Sep/Oct 2025)');
+      if (!name) return;
+      const currency = prompt('Standardvaluta? Skriv SEK eller JPY', 'SEK')?.toUpperCase() === 'JPY' ? 'JPY' : 'SEK';
+      const timezone = 'Asia/Tokyo';
+      const token = randomToken();
+      await addDoc(collection(db, 'trips'), {
+        name, currency, timezone,
+        admins: [uid],
+        members: [uid],
+        inviteToken: token,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+    } catch (err) {
+      msg.textContent = `${err.code || 'error'} – ${err.message}`;
+      alert('Kunde inte skapa resan:\n' + err.message);
+      console.error(err);
+    }
   });
 
   const signOutBtn = document.getElementById('signOutBtn');
@@ -219,24 +266,29 @@ async function renderJoin({ qs }){
     return swapContent(wrap);
   }
 
-  const ref = doc(db, 'trips', tripId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) {
-    wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Hittar inte resan</h2></div>`;
-    return swapContent(wrap);
-  }
-  const t = snap.data();
-  if (t.inviteToken !== token) {
-    wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Fel inbjudningslänk</h2><p class="text-gray-600">Token stämmer inte.</p></div>`;
-    return swapContent(wrap);
+  try {
+    const ref = doc(db, 'trips', tripId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Hittar inte resan</h2></div>`;
+      return swapContent(wrap);
+    }
+    const t = snap.data();
+    if (t.inviteToken !== token) {
+      wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Fel inbjudningslänk</h2><p class="text-gray-600">Token stämmer inte.</p></div>`;
+      return swapContent(wrap);
+    }
+
+    const uid = auth.currentUser.uid;
+    if (!t.members?.includes(uid)) {
+      await updateDoc(ref, { members: arrayUnion(uid), updatedAt: serverTimestamp() });
+    }
+
+    wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Du har gått med i: ${t.name}</h2><a href="#/trips" class="mt-3 inline-block px-3 py-2 rounded-xl bg-black text-white">Till resor</a></div>`;
+  } catch (err) {
+    wrap.innerHTML = `<div class="text-center text-red-600">${err.code || 'error'} – ${err.message}</div>`;
   }
 
-  const uid = auth.currentUser.uid;
-  if (!t.members?.includes(uid)) {
-    await updateDoc(ref, { members: arrayUnion(uid), updatedAt: serverTimestamp() });
-  }
-
-  wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Du har gått med i: ${t.name}</h2><a href="#/trips" class="mt-3 inline-block px-3 py-2 rounded-xl bg-black text-white">Till resor</a></div>`;
   swapContent(wrap);
 }
 
@@ -257,3 +309,12 @@ function randomToken(n = 16){
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
 }
+
+
+==============================
+= Quick checklist if trips don't show
+==============================
+1) In Firebase Console → **Firestore Database**: make sure the DB is **created** (choose a location) and not just the project.
+2) Paste the **rules above** under **Rules** and **Publish**.
+3) Hard refresh the app (DevTools → Network → Disable cache → reload) and try **Ny resa** again.
+4) If an error appears under the list, tell me the exact code (e.g. `permission-denied`).
