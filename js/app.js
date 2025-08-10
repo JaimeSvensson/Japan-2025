@@ -164,12 +164,19 @@ async function renderJoin({ qs }){
 }
 
 // ---- Planner (unchanged from M3 with TZ fix) ----
-async function renderPlanner({ qs }){
+async function renderPlanner({ qs }) {
   const tripId = qs.get('trip');
   const wrap = document.createElement('div');
   if (!tripId) { wrap.innerHTML = '<p>Ingen trip angiven.</p>'; return swapContent(wrap); }
-  const tref = doc(db, 'trips', tripId); const tsnap = await getDoc(tref); if (!tsnap.exists()) { wrap.innerHTML = '<p>Trip saknas.</p>'; return swapContent(wrap); }
-  const trip = tsnap.data(); const TZ = trip.timezone || 'Asia/Tokyo';
+
+  const tref = doc(db, 'trips', tripId);
+  const tsnap = await getDoc(tref);
+  if (!tsnap.exists()) { wrap.innerHTML = '<p>Trip saknas.</p>'; return swapContent(wrap); }
+
+  const trip = tsnap.data();
+  const TZ = trip.timezone || 'Asia/Tokyo';
+
+  // --- build UI first
   wrap.innerHTML = `
     <section class="space-y-4">
       <div class="flex items-center justify-between">
@@ -219,20 +226,64 @@ async function renderPlanner({ qs }){
       </div>
       <div id="days" class="space-y-6"></div>
     </section>`;
-  const todayTZ = dayjs().tz(TZ).format('YYYY-MM-DD'); wrap.querySelector('#date').value = todayTZ;
+
+  // ATTACH NOW so #ids exist in the DOM
+  swapContent(wrap);
+
+  // --- helpers
+  const todayTZ = dayjs().tz(TZ).format('YYYY-MM-DD');
+  byId('date').value = todayTZ;
   const toTs = (d,t)=>{ if(!d||!t) return null; const dt = dayjs.tz(`${d} ${t}`,'YYYY-MM-DD HH:mm',TZ).toDate(); return Timestamp.fromDate(dt); };
   const fmtTime = (ts)=> ts ? dayjs(ts.toDate()).tz(TZ).format('HH:mm') : '';
   const dayKey = (ts)=> dayjs(ts.toDate()).tz(TZ).format('YYYY-MM-DD');
   const dayLabel = (k)=> dayjs.tz(k,'YYYY-MM-DD',TZ).format('dddd D MMMM YYYY');
   const icon = (type)=> ({flight:'✈️',train:'🚄',event:'🎫',other:'📍'}[type]||'📍');
-  const form = wrap.querySelector('#actForm'); const formMsg = wrap.querySelector('#formMsg');
-  form.addEventListener('submit', async (e)=>{ e.preventDefault(); formMsg.textContent=''; try{ const idEditing = byId('editingId').value||null; const type=byId('type').value; const title=byId('title').value?.trim(); const date=byId('date').value; const start=byId('start').value; const end=byId('end').value; const location=byId('location').value?.trim(); const notes=byId('notes').value?.trim(); if(!title||!date||!start) throw new Error('Titel, datum och starttid krävs.'); const payload={type,title,start:toTs(date,start),end:end?toTs(date,end):null,location,notes,createdBy:auth.currentUser.uid,updatedAt:serverTimestamp()}; if(idEditing){ await updateDoc(doc(db,'trips',tripId,'activities',idEditing),payload);} else { await addDoc(collection(db,'trips',tripId,'activities'),{...payload,createdAt:serverTimestamp()}); } form.reset(); byId('date').value=todayTZ; byId('editingId').value=''; byId('cancelEdit').classList.add('hidden'); byId('saveBtn').textContent='Spara aktivitet'; }catch(err){ formMsg.textContent=err.message; console.error(err);} });
+
+  const form = byId('actForm');
+  const formMsg = byId('formMsg');
+  form.addEventListener('submit', async (e)=>{
+    e.preventDefault(); formMsg.textContent='';
+    try{
+      const idEditing = byId('editingId').value||null;
+      const type=byId('type').value;
+      const title=byId('title').value?.trim();
+      const date=byId('date').value;
+      const start=byId('start').value;
+      const end=byId('end').value;
+      const location=byId('location').value?.trim();
+      const notes=byId('notes').value?.trim();
+      if(!title||!date||!start) throw new Error('Titel, datum och starttid krävs.');
+      const payload={type,title,start:toTs(date,start),end:end?toTs(date,end):null,location,notes,createdBy:auth.currentUser.uid,updatedAt:serverTimestamp()};
+      if(idEditing){ await updateDoc(doc(db,'trips',tripId,'activities',idEditing),payload);} else { await addDoc(collection(db,'trips',tripId,'activities'),{...payload,createdAt:serverTimestamp()}); }
+      form.reset(); byId('date').value=todayTZ; byId('editingId').value=''; byId('cancelEdit').classList.add('hidden'); byId('saveBtn').textContent='Spara aktivitet';
+    }catch(err){ formMsg.textContent=err.message; console.error(err);} });
   byId('cancelEdit').addEventListener('click',()=>{ form.reset(); byId('date').value=todayTZ; byId('editingId').value=''; byId('cancelEdit').classList.add('hidden'); byId('saveBtn').textContent='Spara aktivitet'; });
+
   const daysEl = byId('days');
   const qActs = query(collection(db,'trips',tripId,'activities'), orderBy('start','asc'));
-  onSnapshot(qActs,(snap)=>{ const groups={}; snap.forEach(ds=>{ const a=ds.data(); a.id=ds.id; if(!a.start) return; const k=dayKey(a.start); (groups[k] ||= []).push(a);}); daysEl.innerHTML=''; Object.keys(groups).sort().forEach(k=>{ const section=document.createElement('section'); section.innerHTML=`<h3 class="font-semibold text-lg mb-2">${dayLabel(k)}</h3>`; const ul=document.createElement('ul'); ul.className='grid gap-2'; groups[k].forEach(a=>{ const li=document.createElement('li'); li.className='p-3 rounded-2xl border bg-white flex items-center justify-between gap-3'; li.innerHTML=`<div class="min-w-0"><div class="font-medium truncate">${icon(a.type)} ${a.title}</div><div class="text-xs text-gray-500">${fmtTime(a.start)}${a.end?'–'+fmtTime(a.end):''}${a.location?' · '+a.location:''}</div></div><div class="flex items-center gap-2 shrink-0"><button class="edit px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">📝</button><button class="del px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">🗑️</button></div>`; ul.appendChild(li); }); section.appendChild(ul); daysEl.appendChild(section); }); daysEl.querySelectorAll('button.edit').forEach(btn=>btn.addEventListener('click', async(e)=>{ const id=e.currentTarget.dataset.id; const ref=doc(db,'trips',tripId,'activities',id); const s=await getDoc(ref); const a=s.data(); byId('editingId').value=id; byId('type').value=a.type||'other'; byId('title').value=a.title||''; const d=dayKey(a.start); byId('date').value=d; byId('start').value=fmtTime(a.start); byId('end').value=a.end?fmtTime(a.end):''; byId('location').value=a.location||''; byId('notes').value=a.notes||''; byId('saveBtn').textContent='Spara ändringar'; byId('cancelEdit').classList.remove('hidden'); })); daysEl.querySelectorAll('button.del').forEach(btn=>btn.addEventListener('click', async(e)=>{ const id=e.currentTarget.dataset.id; if(!confirm('Ta bort aktiviteten?')) return; await deleteDoc(doc(db,'trips',tripId,'activities',id)); })); });
-  const signOutBtn = document.getElementById('signOutBtn'); signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
-  swapContent(wrap);
+  onSnapshot(qActs,(snap)=>{
+    const groups={};
+    snap.forEach(ds=>{ const a=ds.data(); a.id=ds.id; if(!a.start) return; const k=dayKey(a.start); (groups[k] ||= []).push(a);});
+    daysEl.innerHTML='';
+    Object.keys(groups).sort().forEach(k=>{
+      const section=document.createElement('section');
+      section.innerHTML=`<h3 class="font-semibold text-lg mb-2">${dayLabel(k)}</h3>`;
+      const ul=document.createElement('ul'); ul.className='grid gap-2';
+      groups[k].forEach(a=>{
+        const li=document.createElement('li');
+        li.className='p-3 rounded-2xl border bg-white flex items-center justify-between gap-3';
+        li.innerHTML=`<div class="min-w-0"><div class="font-medium truncate">${icon(a.type)} ${a.title}</div><div class="text-xs text-gray-500">${fmtTime(a.start)}${a.end?'–'+fmtTime(a.end):''}${a.location?' · '+a.location:''}</div></div><div class="flex items-center gap-2 shrink-0"><button class="edit px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">📝</button><button class="del px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">🗑️</button></div>`;
+        ul.appendChild(li);
+      });
+      section.appendChild(ul);
+      daysEl.appendChild(section);
+    });
+    daysEl.querySelectorAll('button.edit').forEach(btn=>btn.addEventListener('click', async(e)=>{ const id=e.currentTarget.dataset.id; const ref=doc(db,'trips',tripId,'activities',id); const s=await getDoc(ref); const a=s.data(); byId('editingId').value=id; byId('type').value=a.type||'other'; byId('title').value=a.title||''; const d=dayKey(a.start); byId('date').value=d; byId('start').value=fmtTime(a.start); byId('end').value=a.end?fmtTime(a.end):''; byId('location').value=a.location||''; byId('notes').value=a.notes||''; byId('saveBtn').textContent='Spara ändringar'; byId('cancelEdit').classList.remove('hidden'); }));
+    daysEl.querySelectorAll('button.del').forEach(btn=>btn.addEventListener('click', async(e)=>{ const id=e.currentTarget.dataset.id; if(!confirm('Ta bort aktiviteten?')) return; await deleteDoc(doc(db,'trips',tripId,'activities',id)); }));
+  });
+
+  const signOutBtn = document.getElementById('signOutBtn');
+  signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
 }
 
 // ---- Members (trip-local display names) ----
@@ -307,7 +358,11 @@ async function renderExpenses({ qs }) {
   const baseC = trip.currency || 'SEK';
   const TZ = trip.timezone || 'Asia/Tokyo';
 
-  // ---------- Shell ----------
+  // names map (filled later)
+  const nameMap = {};
+  const nameOf = (uid)=> nameMap[uid] || (uid===auth.currentUser.uid?'Du':`Medlem ${members.indexOf(uid)+1}`);
+
+  // --- build UI first
   wrap.innerHTML = `
     <section class="space-y-4">
       <div class="flex items-center justify-between">
@@ -318,7 +373,6 @@ async function renderExpenses({ qs }) {
           <a href="#/members?trip=${tripId}" class="text-sm px-3 py-1 rounded-xl border">Medlemmar</a>
         </div>
       </div>
-
       <div class="bg-white rounded-2xl border p-4 space-y-3">
         <h3 class="font-medium">Ny / Ändra utgift</h3>
         <form id="expForm" class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -336,7 +390,7 @@ async function renderExpenses({ qs }) {
             <label class="text-sm col-span-1">Valuta
               <select id="curr" class="mt-1 w-full rounded-xl border px-3 py-2">
                 <option value="${baseC}">${baseC}</option>
-                <option value="${baseC === 'SEK' ? 'JPY' : 'SEK'}">${baseC === 'SEK' ? 'JPY' : 'SEK'}</option>
+                <option value="${baseC==='SEK'?'JPY':'SEK'}">${baseC==='SEK'?'JPY':'SEK'}</option>
               </select>
             </label>
             <label class="text-sm col-span-1">Kurs (<span id="rateLabel"></span>)
@@ -375,12 +429,10 @@ async function renderExpenses({ qs }) {
           <p id="formMsg" class="md:col-span-2 text-sm text-red-600"></p>
         </form>
       </div>
-
       <div class="bg-white rounded-2xl border p-4 space-y-3">
         <h3 class="font-medium">Utgifter</h3>
         <ul id="expList" class="grid gap-2"></ul>
       </div>
-
       <div class="bg-white rounded-2xl border p-4 space-y-3">
         <div class="flex items-center justify-between">
           <h3 class="font-medium">Saldo per person</h3>
@@ -395,10 +447,10 @@ async function renderExpenses({ qs }) {
       </div>
     </section>`;
 
-  // ---------- DOM refs + helpers (BEFORE listeners) ----------
-  const nameMap = {}; // uid -> displayName
-  const nameOf = (uid) => nameMap[uid] || (uid === auth.currentUser.uid ? 'Du' : `Medlem ${members.indexOf(uid) + 1}`);
+  // ATTACH NOW so #ids exist in the DOM
+  swapContent(wrap);
 
+  // --- DOM refs & helpers (safe now) ---
   const dateInput = byId('date');
   const paidBySel = byId('paidBy');
   const involvedEl = byId('involved');
@@ -415,137 +467,65 @@ async function renderExpenses({ qs }) {
   const settlementsList = byId('settlementsList');
   const suggestionsEl = byId('suggestions');
 
-  function updateRateLabel(){
-    const c = currSel.value;
-    if (c === baseC) { rateLabel.textContent = '1:1'; rateInput.disabled = true; rateInput.value = ''; }
-    else {
-      rateInput.disabled = false;
-      if (c === 'JPY' && baseC === 'SEK') rateLabel.textContent = '1 JPY → SEK';
-      else if (c === 'SEK' && baseC === 'JPY') rateLabel.textContent = '1 SEK → JPY';
-      else rateLabel.textContent = `1 ${c} → ${baseC}`;
-    }
-    previewBase();
-  }
-  function previewBase(){
-    const c = currSel.value; const amt = toMinor(amountInput.value, c);
-    let baseMinor = amt;
-    if (c !== baseC) {
-      const r = Number(rateInput.value || '0');
-      if (r > 0) {
-        const major = amt / Math.pow(10, dec(c));
-        baseMinor = Math.round(major * r * Math.pow(10, dec(baseC)));
-      }
-    }
-    basePreview.textContent = amt ? `≈ ${fmtMoney(baseMinor, baseC)} i ${baseC}` : '';
-    return baseMinor;
-  }
-  function getSelectedMembers(){
-    return Array.from(involvedEl.querySelectorAll('input[type=checkbox]:checked')).map(cb => cb.value);
-  }
-  function renderSplitInputs(){
-    splitArea.innerHTML = '';
-    const selected = getSelectedMembers();
-    if (selected.length === 0) { splitArea.innerHTML = '<p class="text-sm text-gray-500">Välj minst en person.</p>'; return; }
-    const mode = modeSel.value;
-    selected.forEach(uid => {
-      const row = document.createElement('div');
-      row.className = 'grid grid-cols-3 items-center gap-2';
-      const label = document.createElement('div'); label.className = 'text-sm'; label.textContent = nameOf(uid); row.appendChild(label);
-      const input = document.createElement('input'); input.className = 'col-span-2 rounded-xl border px-3 py-2'; input.type = 'number'; input.step = mode === 'percent' ? '0.1' : '0.01'; input.dataset.uid = uid; input.dataset.kind = mode; input.placeholder = mode === 'percent' ? '% (t.ex. 25)' : (mode === 'weights' ? 'Vikt (t.ex. 1, 2, 3)' : `${baseC}`); row.appendChild(input);
-      splitArea.appendChild(row);
-    });
-  }
-  function equalize(){
-    const selected = getSelectedMembers();
-    const inputs = Array.from(splitArea.querySelectorAll('input'));
-    const mode = modeSel.value;
-    if (selected.length === 0) return;
-    if (mode === 'percent') {
-      const per = (100 / selected.length).toFixed(2);
-      inputs.forEach(i => i.value = per);
-    } else if (mode === 'weights') {
-      inputs.forEach(i => i.value = '1');
-    } else {
-      const baseMinor = previewBase();
-      const share = Math.floor(baseMinor / selected.length);
-      const r = baseMinor - share * selected.length;
-      inputs.forEach((i, idx) => {
-        const minor = share + (idx < r ? 1 : 0);
-        i.value = (minor / Math.pow(10, dec(baseC))).toFixed(dec(baseC));
-      });
-    }
-  }
-  function populateMembersUI(){
-    // paidBy select
-    paidBySel.innerHTML = '';
-    members.forEach(uid => { const opt = document.createElement('option'); opt.value = uid; opt.textContent = nameOf(uid); paidBySel.appendChild(opt); });
-    // involved chips
-    involvedEl.innerHTML = '';
-    members.forEach(uid => { const lbl = document.createElement('label'); lbl.className = 'px-2 py-1 rounded-xl border text-sm flex items-center gap-2'; lbl.innerHTML = `<input type="checkbox" value="${uid}" class="peer"> <span>${nameOf(uid)}</span>`; involvedEl.appendChild(lbl); });
-    involvedEl.querySelectorAll('input[type=checkbox]').forEach(cb => { if (cb.value === auth.currentUser.uid) cb.checked = true; });
-  }
+  function updateRateLabel(){ const c=currSel.value; if(c===baseC){ rateLabel.textContent='1:1'; rateInput.disabled=true; rateInput.value=''; } else { rateInput.disabled=false; if(c==='JPY'&&baseC==='SEK') rateLabel.textContent='1 JPY → SEK'; else if(c==='SEK'&&baseC==='JPY') rateLabel.textContent='1 SEK → JPY'; else rateLabel.textContent=`1 ${c} → ${baseC}`; } previewBase(); }
+  function previewBase(){ const c=currSel.value; const amt=toMinor(amountInput.value,c); let baseMinor=amt; if(c!==baseC){ const r=Number(rateInput.value||'0'); if(r>0){ const major=amt/Math.pow(10,dec(c)); baseMinor=Math.round(major*r*Math.pow(10,dec(baseC))); } } basePreview.textContent = amt?`≈ ${fmtMoney(baseMinor,baseC)} i ${baseC}`:''; return baseMinor; }
+  function getSelectedMembers(){ return Array.from(involvedEl.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.value);} 
+  function renderSplitInputs(){ splitArea.innerHTML=''; const sel=getSelectedMembers(); if(sel.length===0){ splitArea.innerHTML='<p class="text-sm text-gray-500">Välj minst en person.</p>'; return;} const mode=modeSel.value; sel.forEach(uid=>{ const row=document.createElement('div'); row.className='grid grid-cols-3 items-center gap-2'; const label=document.createElement('div'); label.className='text-sm'; label.textContent=nameOf(uid); row.appendChild(label); const input=document.createElement('input'); input.className='col-span-2 rounded-xl border px-3 py-2'; input.type='number'; input.step=mode==='percent'?'0.1':'0.01'; input.dataset.uid=uid; input.dataset.kind=mode; input.placeholder=mode==='percent'?'% (t.ex. 25)':(mode==='weights'?'Vikt (t.ex. 1, 2, 3)':`${baseC}`); row.appendChild(input); splitArea.appendChild(row); }); }
+  function equalize(){ const sel=getSelectedMembers(); const inputs=Array.from(splitArea.querySelectorAll('input')); const mode=modeSel.value; if(sel.length===0) return; if(mode==='percent'){ const per=(100/sel.length).toFixed(2); inputs.forEach(i=>i.value=per);} else if(mode==='weights'){ inputs.forEach(i=>i.value='1'); } else { const baseMinor=previewBase(); const share=Math.floor(baseMinor/sel.length); const r=baseMinor-share*sel.length; inputs.forEach((i,idx)=>{ const minor=share+(idx<r?1:0); i.value=(minor/Math.pow(10,dec(baseC))).toFixed(dec(baseC)); }); }}
+  function populateMembersUI(){ paidBySel.innerHTML=''; members.forEach(uid=>{ const opt=document.createElement('option'); opt.value=uid; opt.textContent=nameOf(uid); paidBySel.appendChild(opt); }); involvedEl.innerHTML=''; members.forEach(uid=>{ const lbl=document.createElement('label'); lbl.className='px-2 py-1 rounded-xl border text-sm flex items-center gap-2'; lbl.innerHTML=`<input type="checkbox" value="${uid}" class="peer"> <span>${nameOf(uid)}</span>`; involvedEl.appendChild(lbl); }); involvedEl.querySelectorAll('input[type=checkbox]').forEach(cb=>{ if(cb.value===auth.currentUser.uid) cb.checked=true; }); }
 
-  // Prefill date and wire basic UI events
+  // Prefill + wire
   const todayTZ = dayjs().tz(TZ).format('YYYY-MM-DD');
   dateInput.value = todayTZ;
-  currSel.addEventListener('change', updateRateLabel);
-  rateInput.addEventListener('input', previewBase);
-  amountInput.addEventListener('input', previewBase);
-  modeSel.addEventListener('change', renderSplitInputs);
-  involvedEl.addEventListener('change', renderSplitInputs);
-  byId('equalBtn').addEventListener('click', equalize);
+  currSel.addEventListener('change',updateRateLabel);
+  rateInput.addEventListener('input',previewBase);
+  amountInput.addEventListener('input',previewBase);
+  modeSel.addEventListener('change',renderSplitInputs);
+  involvedEl.addEventListener('change',renderSplitInputs);
+  byId('equalBtn').addEventListener('click',equalize);
   updateRateLabel();
 
-  // ---------- Firestore listeners (AFTER helpers/DOM) ----------
-  const nameColl = collection(db, 'trips', tripId, 'members');
-  onSnapshot(nameColl, (snap) => {
-    snap.forEach(ds => { const d = ds.data(); if (d && d.displayName) nameMap[ds.id] = d.displayName; });
-    populateMembersUI();
-    renderSplitInputs();
-  });
+  // Names live
+  onSnapshot(collection(db,'trips',tripId,'members'), (snap)=>{ snap.forEach(ds=>{ const d=ds.data(); if(d?.displayName) nameMap[ds.id]=d.displayName; }); populateMembersUI(); renderSplitInputs(); });
 
-  // expenses + settlements
-  let expensesCache = []; let settlementsCache = [];
-  const qExp = query(collection(db, 'trips', tripId, 'expenses'), orderBy('dateTs', 'desc'));
-  const qSet = query(collection(db, 'trips', tripId, 'settlements'), orderBy('createdAt', 'desc'));
-  onSnapshot(qExp, (snap) => { expensesCache = []; snap.forEach(ds => { const e = ds.data(); e.id = ds.id; expensesCache.push(e); }); renderExpList(); renderBalances(); });
-  onSnapshot(qSet, (snap) => { settlementsCache = []; snap.forEach(ds => { const s = ds.data(); s.id = ds.id; settlementsCache.push(s); }); renderSettlements(); renderBalances(); });
+  // Data live
+  let expensesCache=[]; let settlementsCache=[];
+  onSnapshot(query(collection(db,'trips',tripId,'expenses'), orderBy('dateTs','desc')),(snap)=>{ expensesCache=[]; snap.forEach(ds=>{ const e=ds.data(); e.id=ds.id; expensesCache.push(e); }); renderExpList(); renderBalances(); });
+  onSnapshot(query(collection(db,'trips',tripId,'settlements'), orderBy('createdAt','desc')),(snap)=>{ settlementsCache=[]; snap.forEach(ds=>{ const s=ds.data(); s.id=ds.id; settlementsCache.push(s); }); renderSettlements(); renderBalances(); });
 
-  // ---------- Save / Update expense ----------
-  byId('expForm').addEventListener('submit', async (e) => {
-    e.preventDefault(); formMsg.textContent = '';
-    try {
+  // Save / Update
+  byId('expForm').addEventListener('submit', async (e)=>{
+    e.preventDefault(); formMsg.textContent='';
+    try{
       const editingId = byId('editingExpId').value || null;
       const title = byId('title').value?.trim() || 'Utgift';
-      const dateStr = dateInput.value; if (!dateStr) throw new Error('Datum krävs.');
-      const amountMajor = Number(String(amountInput.value).replace(',', '.')) || 0; if (amountMajor <= 0) throw new Error('Belopp måste vara > 0');
-      const expenseC = currSel.value; const baseMinor = previewBase(); if (baseMinor <= 0) throw new Error('Sätt korrekt kurs/belopp.');
-      const paidBy = paidBySel.value; const inv = getSelectedMembers(); if (inv.length === 0) throw new Error('Välj inblandade.');
+      const dateStr = dateInput.value; if(!dateStr) throw new Error('Datum krävs.');
+      const amountMajor = Number(String(amountInput.value).replace(',','.')) || 0; if(amountMajor<=0) throw new Error('Belopp måste vara > 0');
+      const expenseC = currSel.value; const baseMinor = previewBase(); if(baseMinor<=0) throw new Error('Sätt korrekt kurs/belopp.');
+      const paidBy = paidBySel.value; const inv = getSelectedMembers(); if(inv.length===0) throw new Error('Välj inblandade.');
       const mode = modeSel.value;
-      // Build split in base currency minor units
-      let split = {}; const inputs = Array.from(splitArea.querySelectorAll('input'));
-      if (mode === 'exact') { let sum = 0; inputs.forEach(i => { const uid = i.dataset.uid; const m = toMinor(i.value, baseC); split[uid] = m; sum += m; }); if (sum !== baseMinor) throw new Error('Summan av exakta belopp måste vara lika med totalsumman.'); }
-      else if (mode === 'percent') { let p = 0; inputs.forEach(i => p += Number(i.value || '0')); if (Math.round(p * 100) / 100 !== 100) throw new Error('Procent måste summera till 100.'); const amounts = inputs.map(i => Math.floor(baseMinor * (Number(i.value || '0') / 100))); let sum = amounts.reduce((a, b) => a + b, 0); let r = baseMinor - sum; inputs.forEach((i, idx) => { const uid = i.dataset.uid; const add = idx < r ? 1 : 0; split[uid] = amounts[idx] + add; }); }
-      else { const weights = inputs.map(i => Math.max(0, Number(i.value || '0'))); const totalW = weights.reduce((a, b) => a + b, 0); if (totalW <= 0) throw new Error('Vikter måste vara > 0.'); const amounts = weights.map(w => Math.floor(baseMinor * (w / totalW))); let sum = amounts.reduce((a, b) => a + b, 0); let r = baseMinor - sum; inputs.forEach((i, idx) => { const uid = i.dataset.uid; const add = idx < r ? 1 : 0; split[uid] = amounts[idx] + add; }); }
-      const dateTs = Timestamp.fromDate(dayjs.tz(dateStr, 'YYYY-MM-DD', TZ).toDate());
-      const expense = { title, dateTs, expenseCurrency: expenseC, amountOriginalMinor: toMinor(amountInput.value, expenseC), baseCurrency: baseC, baseAmountMinor: baseMinor, rateToBase: expenseC === baseC ? 1 : Number(rateInput.value || '0'), paidBy, involved: inv, splitMode: mode, splitBase: split, notes: byId('notes').value?.trim() || '', createdBy: auth.currentUser.uid, updatedAt: serverTimestamp() };
-      if (editingId) { await updateDoc(doc(db, 'trips', tripId, 'expenses', editingId), expense); }
-      else { await addDoc(collection(db, 'trips', tripId, 'expenses'), { ...expense, createdAt: serverTimestamp() }); }
-      e.target.reset(); updateRateLabel(); renderSplitInputs(); basePreview.textContent = ''; dateInput.value = todayTZ; byId('editingExpId').value = ''; byId('cancelEditBtn').classList.add('hidden');
-    } catch (err) { formMsg.textContent = err.message; console.error(err); }
+      let split={}; const inputs=Array.from(splitArea.querySelectorAll('input'));
+      if(mode==='exact'){ let sum=0; inputs.forEach(i=>{ const uid=i.dataset.uid; const m=toMinor(i.value,baseC); split[uid]=m; sum+=m; }); if(sum!==baseMinor) throw new Error('Summan av exakta belopp måste vara lika med totalsumman.'); }
+      else if(mode==='percent'){ let p=0; inputs.forEach(i=>p+=Number(i.value||'0')); if(Math.round(p*100)/100!==100) throw new Error('Procent måste summera till 100.'); const amounts=inputs.map(i=>Math.floor(baseMinor*(Number(i.value||'0')/100))); let sum=amounts.reduce((a,b)=>a+b,0); let r=baseMinor-sum; inputs.forEach((i,idx)=>{ const uid=i.dataset.uid; const add=idx<r?1:0; split[uid]=amounts[idx]+add; }); }
+      else { const weights=inputs.map(i=>Math.max(0,Number(i.value||'0'))); const totalW=weights.reduce((a,b)=>a+b,0); if(totalW<=0) throw new Error('Vikter måste vara > 0.'); const amounts=weights.map(w=>Math.floor(baseMinor*(w/totalW))); let sum=amounts.reduce((a,b)=>a+b,0); let r=baseMinor-sum; inputs.forEach((i,idx)=>{ const uid=i.dataset.uid; const add=idx<r?1:0; split[uid]=amounts[idx]+add; }); }
+      const dateTs = Timestamp.fromDate(dayjs.tz(dateStr,'YYYY-MM-DD',TZ).toDate());
+      const expense={ title, dateTs, expenseCurrency: expenseC, amountOriginalMinor: toMinor(amountInput.value,expenseC), baseCurrency: baseC, baseAmountMinor: baseMinor, rateToBase: expenseC===baseC?1:Number(rateInput.value||'0'), paidBy, involved: inv, splitMode: mode, splitBase: split, notes: byId('notes').value?.trim()||'', createdBy: auth.currentUser.uid, updatedAt: serverTimestamp() };
+      if(editingId){ await updateDoc(doc(db,'trips',tripId,'expenses',editingId), expense);} else { await addDoc(collection(db,'trips',tripId,'expenses'), { ...expense, createdAt: serverTimestamp() }); }
+      e.target.reset(); updateRateLabel(); renderSplitInputs(); basePreview.textContent=''; dateInput.value=todayTZ; byId('editingExpId').value=''; byId('cancelEditBtn').classList.add('hidden');
+    }catch(err){ formMsg.textContent=err.message; console.error(err); }
   });
-  byId('cancelEditBtn').addEventListener('click', () => { byId('expForm').reset(); dateInput.value = todayTZ; byId('editingExpId').value = ''; byId('cancelEditBtn').classList.add('hidden'); updateRateLabel(); renderSplitInputs(); });
+  byId('cancelEditBtn').addEventListener('click',()=>{ byId('expForm').reset(); dateInput.value=todayTZ; byId('editingExpId').value=''; byId('cancelEditBtn').classList.add('hidden'); updateRateLabel(); renderSplitInputs(); });
 
-  // ---------- List + balances + settlements ----------
+  // List + balances + settlements
   function renderExpList(){
-    expList.innerHTML = '';
-    expensesCache.forEach(e => {
-      const li = document.createElement('li'); li.className = 'p-3 rounded-2xl border bg-white flex items-center justify-between gap-3';
+    expList.innerHTML='';
+    expensesCache.forEach(e=>{
+      const li=document.createElement('li'); li.className='p-3 rounded-2xl border bg-white flex items-center justify-between gap-3';
       const dateStr = e.dateTs ? dayjs(e.dateTs.toDate()).tz(TZ).format('YYYY-MM-DD') : '';
       li.innerHTML = `
         <div class="min-w-0">
           <div class="font-medium truncate">${e.title || 'Utgift'}</div>
-          <div class="text-xs text-gray-500">${dateStr} · Betalat: ${nameOf(e.paidBy)} · Summa: ${fmtMoney(e.baseAmountMinor, baseC)} ${e.expenseCurrency !== baseC ? `(orig ${fmtMoney(e.amountOriginalMinor, e.expenseCurrency)} @${e.rateToBase})` : ''}</div>
+          <div class="text-xs text-gray-500">${dateStr} · Betalat: ${nameOf(e.paidBy)} · Summa: ${fmtMoney(e.baseAmountMinor, baseC)} ${e.expenseCurrency!==baseC?`(orig ${fmtMoney(e.amountOriginalMinor,e.expenseCurrency)} @${e.rateToBase})`:''}</div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
           <button class="editExp px-3 py-1 rounded-xl border text-sm" data-id="${e.id}">📝</button>
@@ -553,63 +533,34 @@ async function renderExpenses({ qs }) {
         </div>`;
       expList.appendChild(li);
     });
-    expList.querySelectorAll('button.delExp').forEach(btn => btn.addEventListener('click', async (ev) => { const id = ev.currentTarget.dataset.id; if (!confirm('Ta bort utgiften?')) return; await deleteDoc(doc(db, 'trips', tripId, 'expenses', id)); }));
-    expList.querySelectorAll('button.editExp').forEach(btn => btn.addEventListener('click', async (ev) => {
-      const id = ev.currentTarget.dataset.id; const s = await getDoc(doc(db, 'trips', tripId, 'expenses', id)); const e = s.data();
-      byId('editingExpId').value = id; byId('title').value = e.title || ''; dateInput.value = dayjs(e.dateTs.toDate()).tz(TZ).format('YYYY-MM-DD'); byId('curr').value = e.expenseCurrency || baseC; byId('amount').value = (e.amountOriginalMinor / Math.pow(10, dec(e.expenseCurrency || baseC))).toFixed(dec(e.expenseCurrency || baseC)); byId('rate').value = e.rateToBase || ''; paidBySel.value = e.paidBy; involvedEl.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = (e.involved || []).includes(cb.value)); modeSel.value = e.splitMode || 'exact'; renderSplitInputs(); const inputs = Array.from(splitArea.querySelectorAll('input')); inputs.forEach(i => { const uid = i.dataset.uid; const m = (e.splitBase || {})[uid] || 0; if (modeSel.value === 'percent') i.value = (m / (e.baseAmountMinor || 1) * 100).toFixed(2); else if (modeSel.value === 'weights') i.value = String(m); else i.value = (m / Math.pow(10, dec(baseC))).toFixed(dec(baseC)); }); byId('notes').value = e.notes || ''; byId('cancelEditBtn').classList.remove('hidden'); window.scrollTo({ top: 0, behavior: 'smooth' });
-    }));
+    expList.querySelectorAll('button.delExp').forEach(btn=>btn.addEventListener('click', async(ev)=>{ const id=ev.currentTarget.dataset.id; if(!confirm('Ta bort utgiften?')) return; await deleteDoc(doc(db,'trips',tripId,'expenses',id)); }));
+    expList.querySelectorAll('button.editExp').forEach(btn=>btn.addEventListener('click', async(ev)=>{ const id=ev.currentTarget.dataset.id; const s=await getDoc(doc(db,'trips',tripId,'expenses',id)); const e=s.data(); byId('editingExpId').value=id; byId('title').value=e.title||''; dateInput.value=dayjs(e.dateTs.toDate()).tz(TZ).format('YYYY-MM-DD'); byId('curr').value=e.expenseCurrency||baseC; byId('amount').value=(e.amountOriginalMinor/Math.pow(10,dec(e.expenseCurrency||baseC))).toFixed(dec(e.expenseCurrency||baseC)); byId('rate').value=e.rateToBase||''; paidBySel.value=e.paidBy; involvedEl.querySelectorAll('input[type=checkbox]').forEach(cb=> cb.checked=(e.involved||[]).includes(cb.value)); modeSel.value=e.splitMode||'exact'; renderSplitInputs(); const inputs=Array.from(splitArea.querySelectorAll('input')); inputs.forEach(i=>{ const uid=i.dataset.uid; const m=(e.splitBase||{})[uid]||0; if(modeSel.value==='percent') i.value=(m/(e.baseAmountMinor||1)*100).toFixed(2); else if(modeSel.value==='weights') i.value=String(m); else i.value=(m/Math.pow(10,dec(baseC))).toFixed(dec(baseC)); }); byId('notes').value=e.notes||''; byId('cancelEditBtn').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }));
   }
   function renderSettlements(){
-    settlementsList.innerHTML = '';
-    settlementsCache.forEach(s => {
-      const li = document.createElement('li');
-      li.innerHTML = `${nameOf(s.from)} → ${nameOf(s.to)}: <strong>${fmtMoney(s.amountMinor || 0, s.currency || baseC)}</strong> <button data-id="${s.id}" class="ml-2 px-2 py-0.5 rounded-xl border text-xs delSet">Ta bort</button>`;
-      settlementsList.appendChild(li);
-    });
-    settlementsList.querySelectorAll('button.delSet').forEach(btn => btn.addEventListener('click', async (e) => { const id = e.currentTarget.dataset.id; if (!confirm('Ta bort regleringen?')) return; await deleteDoc(doc(db, 'trips', tripId, 'settlements', id)); }));
+    settlementsList.innerHTML='';
+    settlementsCache.forEach(s=>{ const li=document.createElement('li'); li.innerHTML=`${nameOf(s.from)} → ${nameOf(s.to)}: <strong>${fmtMoney(s.amountMinor||0, s.currency||baseC)}</strong> <button data-id="${s.id}" class="ml-2 px-2 py-0.5 rounded-xl border text-xs delSet">Ta bort</button>`; settlementsList.appendChild(li); });
+    settlementsList.querySelectorAll('button.delSet').forEach(btn=>btn.addEventListener('click', async(e)=>{ const id=e.currentTarget.dataset.id; if(!confirm('Ta bort regleringen?')) return; await deleteDoc(doc(db,'trips',tripId,'settlements',id)); }));
   }
   function renderBalances(){
-    const net = {}; members.forEach(u => net[u] = 0);
-    expensesCache.forEach(e => { net[e.paidBy] = (net[e.paidBy] || 0) + (e.baseAmountMinor || 0); if (e.splitBase) Object.entries(e.splitBase).forEach(([u, share]) => { net[u] = (net[u] || 0) - share; }); });
-    settlementsCache.forEach(s => { const amt = s.amountMinor || 0; net[s.from] = (net[s.from] || 0) + amt; net[s.to] = (net[s.to] || 0) - amt; });
-    balancesEl.innerHTML = '';
-    members.forEach(u => { const v = net[u] || 0; const chip = document.createElement('span'); chip.className = `px-3 py-1 rounded-full text-sm border ${v > 0 ? 'bg-green-50 text-green-700 border-green-200' : (v < 0 ? 'bg-red-50 text-red-700 border-red-200' : 'bg-gray-50 text-gray-600 border-gray-200')}`; chip.textContent = `${nameOf(u)}: ${fmtMoney(Math.abs(v), baseC)} ${v >= 0 ? '+' : '-'}`; balancesEl.appendChild(chip); });
-    renderBalances.net = net; // expose to suggestion generator
+    const net={}; members.forEach(u=>net[u]=0);
+    expensesCache.forEach(e=>{ net[e.paidBy]=(net[e.paidBy]||0)+(e.baseAmountMinor||0); if(e.splitBase) Object.entries(e.splitBase).forEach(([u,share])=>{ net[u]=(net[u]||0)-share; }); });
+    settlementsCache.forEach(s=>{ const amt=s.amountMinor||0; net[s.from]=(net[s.from]||0)+amt; net[s.to]=(net[s.to]||0)-amt; });
+    balancesEl.innerHTML=''; members.forEach(u=>{ const v=net[u]||0; const chip=document.createElement('span'); chip.className=`px-3 py-1 rounded-full text-sm border ${v>0?'bg-green-50 text-green-700 border-green-200':(v<0?'bg-red-50 text-red-700 border-red-200':'bg-gray-50 text-gray-600 border-gray-200')}`; chip.textContent=`${nameOf(u)}: ${fmtMoney(Math.abs(v),baseC)} ${v>=0?'+':'-'}`; balancesEl.appendChild(chip); });
+    renderBalances.net = net;
   }
 
-  // suggestions
-  byId('suggestBtn').addEventListener('click', () => {
-    const net = { ...(renderBalances.net || {}) };
-    const creditors = Object.entries(net).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
-    const debtors = Object.entries(net).filter(([, v]) => v < 0).sort((a, b) => a[1] - b[1]);
-    const suggestions = []; let i = 0, j = 0;
-    while (i < creditors.length && j < debtors.length) {
-      const [cu, cv] = creditors[i]; const [du, dv] = debtors[j];
-      const give = Math.min(cv, -dv);
-      suggestions.push({ from: du, to: cu, amount: give });
-      creditors[i][1] -= give; debtors[j][1] += give;
-      if (creditors[i][1] === 0) i++; if (debtors[j][1] === 0) j++;
-    }
+  byId('suggestBtn').addEventListener('click',()=>{
+    const net={...(renderBalances.net||{})};
+    const creditors=Object.entries(net).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+    const debtors=Object.entries(net).filter(([,v])=>v<0).sort((a,b)=>a[1]-b[1]);
+    const suggestions=[]; let i=0,j=0;
+    while(i<creditors.length && j<debtors.length){ const [cu,cv]=creditors[i]; const [du,dv]=debtors[j]; const give=Math.min(cv,-dv); suggestions.push({from:du,to:cu,amount:give}); creditors[i][1]-=give; debtors[j][1]+=give; if(creditors[i][1]===0) i++; if(debtors[j][1]===0) j++; }
     renderSuggestions(suggestions);
   });
-  function renderSuggestions(list){
-    suggestionsEl.innerHTML = '';
-    if (list.length === 0) { suggestionsEl.textContent = 'Inga överföringar föreslagna – alla är kvitt.'; return; }
-    list.forEach(s => {
-      const row = document.createElement('div'); row.className = 'flex items-center justify-between rounded-xl border p-2';
-      row.innerHTML = `<div>${nameOf(s.from)} → ${nameOf(s.to)}: <strong>${fmtMoney(s.amount, baseC)}</strong></div>`;
-      const btn = document.createElement('button'); btn.className = 'px-3 py-1 rounded-xl border text-sm'; btn.textContent = 'Markera som reglerad';
-      btn.addEventListener('click', async () => {
-        await addDoc(collection(db, 'trips', tripId, 'settlements'), { from: s.from, to: s.to, amountMinor: s.amount, currency: baseC, createdAt: serverTimestamp(), createdBy: auth.currentUser.uid });
-      });
-      row.appendChild(btn); suggestionsEl.appendChild(row);
-    });
-  }
+  function renderSuggestions(list){ suggestionsEl.innerHTML=''; if(list.length===0){ suggestionsEl.textContent='Inga överföringar föreslagna – alla är kvitt.'; return; } list.forEach(s=>{ const row=document.createElement('div'); row.className='flex items-center justify-between rounded-xl border p-2'; row.innerHTML=`<div>${nameOf(s.from)} → ${nameOf(s.to)}: <strong>${fmtMoney(s.amount,baseC)}</strong></div>`; const btn=document.createElement('button'); btn.className='px-3 py-1 rounded-xl border text-sm'; btn.textContent='Markera som reglerad'; btn.addEventListener('click', async()=>{ await addDoc(collection(db,'trips',tripId,'settlements'),{ from:s.from,to:s.to,amountMinor:s.amount,currency:baseC,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid }); }); row.appendChild(btn); suggestionsEl.appendChild(row); }); }
 
   const signOutBtn = document.getElementById('signOutBtn');
-  signOutBtn.onclick = async () => { await signOut(auth); location.hash = '#/login'; };
-
-  swapContent(wrap);
+  signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
 }
 
 // ---- Not Found ----
