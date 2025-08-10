@@ -1,4 +1,3 @@
-// js/app.js
 import { auth } from './firebase.js';
 import {
   onAuthStateChanged,
@@ -7,7 +6,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signOut
-} from "https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const view = document.getElementById('view');
 
@@ -45,9 +44,9 @@ function authGuard(viewFn){
   }
 }
 
-function swapContent(html){
+function swapContent(node){
   view.innerHTML = '';
-  view.appendChild(html);
+  view.appendChild(node);
 }
 
 function renderLogin(){
