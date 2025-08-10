@@ -612,9 +612,5 @@ async function renderExpenses({ qs }) {
   swapContent(wrap);
 }
 
-  const signOutBtn = document.getElementById('signOutBtn'); signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
-  swapContent(wrap);
-}
-
 // ---- Not Found ----
 function renderNotFound(){ const wrap=document.createElement('div'); wrap.className='min-h-[40vh] grid place-items-center text-center'; wrap.innerHTML=`<div><h2 class="text-2xl font-semibold mb-2">Sidan kunde inte hittas</h2><p class="text-gray-600 mb-4">Gå till startsidan.</p><a href="#/trips" class="px-3 py-2 rounded-xl bg-black text-white">Till appen</a></div>`; swapContent(wrap); }
