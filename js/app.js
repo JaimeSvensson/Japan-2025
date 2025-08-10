@@ -1,4 +1,4 @@
-// js/app.js — M1 router patch: fix double-slash route + use relative hash links
+// js/app.js — FINAL router hotfix
 import { auth, db } from './firebase.js';
 import {
   onAuthStateChanged,
@@ -23,7 +23,7 @@ import {
 
 const view = document.getElementById('view');
 
-// ---- Router helpers (fixed) ----
+// ---- Router (robust) ----
 const routes = {
   '/login': renderLogin,
   '/trips': authGuard(renderTrips),
@@ -31,9 +31,11 @@ const routes = {
 };
 
 function parseRoute(){
-  const raw = (location.hash || '#/login').slice(1); // remove '#'
-  const [path, qs] = raw.split('?');
-  return { path: path.startsWith('/') ? path : '/' + path, qs: new URLSearchParams(qs) };
+  // Examples handled: "#/trips", "#trips", "trips", "//#/trips?x=1"
+  const raw = (location.hash || '#/login').replace(/^#+/, '');
+  const [pathRaw, qsRaw] = raw.split('?');
+  const normalized = '/' + pathRaw.replace(/^\/*/, ''); // ensure single leading '/'
+  return { path: normalized, qs: new URLSearchParams(qsRaw) };
 }
 
 function navigate(){
