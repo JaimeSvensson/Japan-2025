@@ -1,3 +1,4 @@
+// js/app.js — M1 router patch: fix double-slash route + use relative hash links
 import { auth, db } from './firebase.js';
 import {
   onAuthStateChanged,
@@ -22,19 +23,24 @@ import {
 
 const view = document.getElementById('view');
 
-// Routes
+// ---- Router helpers (fixed) ----
 const routes = {
   '/login': renderLogin,
   '/trips': authGuard(renderTrips),
   '/join': authGuard(renderJoin)
 };
 
-function navigate(hash){
-  const path = (hash || location.hash || '#/login');
-  const [route, qs] = path.replace('#','').split('?');
-  (routes['/' + route] || renderNotFound)({ qs: new URLSearchParams(qs) });
+function parseRoute(){
+  const raw = (location.hash || '#/login').slice(1); // remove '#'
+  const [path, qs] = raw.split('?');
+  return { path: path.startsWith('/') ? path : '/' + path, qs: new URLSearchParams(qs) };
 }
-window.addEventListener('hashchange', () => navigate());
+
+function navigate(){
+  const { path, qs } = parseRoute();
+  (routes[path] || renderNotFound)({ qs });
+}
+window.addEventListener('hashchange', navigate);
 
 // Auth state → show user + guard
 onAuthStateChanged(auth, (user) => {
@@ -43,7 +49,7 @@ onAuthStateChanged(auth, (user) => {
   if (user) {
     userArea.classList.remove('hidden');
     userName.textContent = user.displayName || user.email || 'Inloggad';
-    if (location.hash === '' || location.hash === '#/login') location.replace('#/trips');
+    if (!location.hash || location.hash === '#/login') location.replace('#/trips');
   } else {
     userArea.classList.add('hidden');
     if (location.hash !== '#/login') location.replace('#/login');
@@ -55,7 +61,7 @@ function authGuard(viewFn){
   return (ctx={}) => {
     if (!auth.currentUser) return renderLogin();
     return viewFn(ctx);
-  }
+  };
 }
 
 function swapContent(node){
@@ -135,7 +141,6 @@ function renderTrips(){
   const list = wrap.querySelector('#tripList');
   const uid = auth.currentUser.uid;
 
-  // Live query: trips where current user is a member
   const qTrips = query(collection(db, 'trips'), where('members', 'array-contains', uid));
   const unsub = onSnapshot(qTrips, (snap) => {
     list.innerHTML = '';
@@ -161,7 +166,6 @@ function renderTrips(){
       list.appendChild(li);
     });
 
-    // Wire invite buttons
     list.querySelectorAll('.copyInvite').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const id = e.currentTarget.getAttribute('data-id');
@@ -180,7 +184,6 @@ function renderTrips(){
     });
   });
 
-  // Create new trip
   wrap.querySelector('#newTripBtn').addEventListener('click', async () => {
     const name = prompt('Resans namn? (ex. Tokyo & Kansai – Sep/Oct 2025)');
     if (!name) return;
@@ -197,7 +200,6 @@ function renderTrips(){
     });
   });
 
-  // Sign out in header
   const signOutBtn = document.getElementById('signOutBtn');
   signOutBtn.onclick = async () => { await signOut(auth); location.hash = '#/login'; };
 
@@ -227,13 +229,12 @@ async function renderJoin({ qs }){
     return swapContent(wrap);
   }
 
-  // Add user if not already member
   const uid = auth.currentUser.uid;
   if (!t.members?.includes(uid)) {
     await updateDoc(ref, { members: arrayUnion(uid), updatedAt: serverTimestamp() });
   }
 
-  wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Du har gått med i: ${t.name}</h2><a href="/#/trips" class="mt-3 inline-block px-3 py-2 rounded-xl bg-black text-white">Till resor</a></div>`;
+  wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Du har gått med i: ${t.name}</h2><a href="#/trips" class="mt-3 inline-block px-3 py-2 rounded-xl bg-black text-white">Till resor</a></div>`;
   swapContent(wrap);
 }
 
@@ -244,7 +245,7 @@ function renderNotFound(){
     <div>
       <h2 class="text-2xl font-semibold mb-2">Sidan kunde inte hittas</h2>
       <p class="text-gray-600 mb-4">Gå till startsidan.</p>
-      <a href="/#/trips" class="px-3 py-2 rounded-xl bg-black text-white">Till appen</a>
+      <a href="#/trips" class="px-3 py-2 rounded-xl bg-black text-white">Till appen</a>
     </div>`;
   swapContent(wrap);
 }
