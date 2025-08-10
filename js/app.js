@@ -181,8 +181,15 @@ async function renderPlanner({ qs }){
   const tripId = qs.get('trip');
   const wrap = document.createElement('div');
   if (!tripId) { wrap.innerHTML = '<p>Ingen trip angiven.</p>'; return swapContent(wrap); }
-  const tref = doc(db, 'trips', tripId); const tsnap = await getDoc(tref); if (!tsnap.exists()) { wrap.innerHTML = '<p>Trip saknas.</p>'; return swapContent(wrap); }
-  const trip = tsnap.data(); const TZ = trip.timezone || 'Asia/Tokyo';
+
+  // Load trip meta
+  const tref = doc(db, 'trips', tripId);
+  const tsnap = await getDoc(tref);
+  if (!tsnap.exists()) { wrap.innerHTML = '<p>Trip saknas.</p>'; return swapContent(wrap); }
+  const trip = tsnap.data();
+  const TZ = trip.timezone || 'Asia/Tokyo'; // ← declare TZ ONCE here
+
+  // UI shell
   wrap.innerHTML = `
     <section class="space-y-4">
       <div class="flex items-center justify-between">
@@ -190,6 +197,7 @@ async function renderPlanner({ qs }){
         <h2 class="text-xl font-semibold">${trip.name || 'Resa'}</h2>
         <a href="#/expenses?trip=${tripId}" class="text-sm px-3 py-1 rounded-xl border">Utgifter</a>
       </div>
+
       <div class="bg-white rounded-2xl border p-4 space-y-3">
         <h3 class="font-medium">Lägg till/ändra aktivitet</h3>
         <form id="actForm" class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -230,24 +238,131 @@ async function renderPlanner({ qs }){
           <p id="formMsg" class="md:col-span-2 text-sm text-red-600"></p>
         </form>
       </div>
+
       <div id="days" class="space-y-6"></div>
     </section>`;
-  const TZ = trip.timezone || 'Asia/Tokyo';
-  const todayTZ = dayjs().tz(TZ).format('YYYY-MM-DD'); wrap.querySelector('#date').value = todayTZ;
-  const toTs = (d, t) => { if (!d || !t) return null; const dt = dayjs.tz(`${d} ${t}`, 'YYYY-MM-DD HH:mm', TZ).toDate(); return Timestamp.fromDate(dt); };
+
+  // Pre-fill date to today in trip TZ
+  const todayTZ = dayjs().tz(TZ).format('YYYY-MM-DD');
+  wrap.querySelector('#date').value = todayTZ;
+
+  // Helpers
+  const toTs = (d, t) => {
+    if (!d || !t) return null;
+    const dt = dayjs.tz(`${d} ${t}`, 'YYYY-MM-DD HH:mm', TZ).toDate();
+    return Timestamp.fromDate(dt);
+  };
   const fmtTime = (ts) => ts ? dayjs(ts.toDate()).tz(TZ).format('HH:mm') : '';
   const dayKey = (ts) => dayjs(ts.toDate()).tz(TZ).format('YYYY-MM-DD');
   const dayLabel = (k) => dayjs.tz(k, 'YYYY-MM-DD', TZ).format('dddd D MMMM YYYY');
   const icon = (type) => ({ flight:'✈️', train:'🚄', event:'🎫', other:'📍' }[type] || '📍');
-  const form = wrap.querySelector('#actForm'); const formMsg = wrap.querySelector('#formMsg');
-  form.addEventListener('submit', async (e) => { e.preventDefault(); formMsg.textContent=''; try { const idEditing = wrap.querySelector('#editingId').value || null; const type = wrap.querySelector('#type').value; const title = wrap.querySelector('#title').value?.trim(); const date = wrap.querySelector('#date').value; const start = wrap.querySelector('#start').value; const end = wrap.querySelector('#end').value; const location = wrap.querySelector('#location').value?.trim(); const notes = wrap.querySelector('#notes').value?.trim(); if (!title || !date || !start) throw new Error('Titel, datum och starttid krävs.'); const payload = { type, title, start: toTs(date, start), end: end ? toTs(date, end) : null, location, notes, createdBy: auth.currentUser.uid, updatedAt: serverTimestamp() }; if (idEditing) { await updateDoc(doc(db, 'trips', tripId, 'activities', idEditing), payload); } else { await addDoc(collection(db, 'trips', tripId, 'activities'), { ...payload, createdAt: serverTimestamp() }); } form.reset(); wrap.querySelector('#date').value = todayTZ; wrap.querySelector('#editingId').value = ''; wrap.querySelector('#cancelEdit').classList.add('hidden'); wrap.querySelector('#saveBtn').textContent = 'Spara aktivitet'; } catch(err){ formMsg.textContent = err.message; console.error(err); } });
-  wrap.querySelector('#cancelEdit').addEventListener('click', () => { form.reset(); wrap.querySelector('#date').value = todayTZ; wrap.querySelector('#editingId').value = ''; wrap.querySelector('#cancelEdit').classList.add('hidden'); wrap.querySelector('#saveBtn').textContent = 'Spara aktivitet'; });
+
+  // Save / Update
+  const form = wrap.querySelector('#actForm');
+  const formMsg = wrap.querySelector('#formMsg');
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault(); formMsg.textContent = '';
+    try{
+      const idEditing = wrap.querySelector('#editingId').value || null;
+      const type = wrap.querySelector('#type').value;
+      const title = wrap.querySelector('#title').value?.trim();
+      const date = wrap.querySelector('#date').value;
+      const start = wrap.querySelector('#start').value;
+      const end = wrap.querySelector('#end').value;
+      const location = wrap.querySelector('#location').value?.trim();
+      const notes = wrap.querySelector('#notes').value?.trim();
+      if (!title || !date || !start) throw new Error('Titel, datum och starttid krävs.');
+      const payload = {
+        type, title,
+        start: toTs(date, start),
+        end: end ? toTs(date, end) : null,
+        location, notes,
+        createdBy: auth.currentUser.uid,
+        updatedAt: serverTimestamp(),
+      };
+      if (idEditing) {
+        await updateDoc(doc(db, 'trips', tripId, 'activities', idEditing), payload);
+      } else {
+        await addDoc(collection(db, 'trips', tripId, 'activities'), { ...payload, createdAt: serverTimestamp() });
+      }
+      form.reset();
+      wrap.querySelector('#date').value = todayTZ; // keep today
+      wrap.querySelector('#editingId').value = '';
+      wrap.querySelector('#cancelEdit').classList.add('hidden');
+      wrap.querySelector('#saveBtn').textContent = 'Spara aktivitet';
+    } catch(err){ formMsg.textContent = err.message; console.error(err); }
+  });
+  wrap.querySelector('#cancelEdit').addEventListener('click', () => {
+    form.reset(); wrap.querySelector('#date').value = todayTZ; wrap.querySelector('#editingId').value = '';
+    wrap.querySelector('#cancelEdit').classList.add('hidden');
+    wrap.querySelector('#saveBtn').textContent = 'Spara aktivitet';
+  });
+
+  // List activities grouped by day
   const daysEl = wrap.querySelector('#days');
   const qActs = query(collection(db, 'trips', tripId, 'activities'), orderBy('start', 'asc'));
-  onSnapshot(qActs, (snap) => { const groups = {}; snap.forEach(docSnap => { const a = docSnap.data(); a.id = docSnap.id; if (!a.start) return; const k = dayKey(a.start); (groups[k] ||= []).push(a); }); daysEl.innerHTML = ''; Object.keys(groups).sort().forEach(k => { const section = document.createElement('section'); section.innerHTML = `<h3 class="font-semibold text-lg mb-2">${dayLabel(k)}</h3>`; const ul = document.createElement('ul'); ul.className = 'grid gap-2'; groups[k].forEach(a => { const li = document.createElement('li'); li.className = 'p-3 rounded-2xl border bg-white flex items-center justify-between gap-3'; li.innerHTML = `<div class="min-w-0"><div class="font-medium truncate">${icon(a.type)} ${a.title}</div><div class="text-xs text-gray-500">${fmtTime(a.start)}${a.end ? '–'+fmtTime(a.end) : ''}${a.location ? ' · ' + a.location : ''}</div></div><div class="flex items-center gap-2 shrink-0"><button class="edit px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">📝</button><button class="del px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">🗑️</button></div>`; ul.appendChild(li); }); section.appendChild(ul); daysEl.appendChild(section); }); daysEl.querySelectorAll('button.edit').forEach(btn => btn.addEventListener('click', async (e) => { const id = e.currentTarget.dataset.id; const ref = doc(db, 'trips', tripId, 'activities', id); const s = await getDoc(ref); const a = s.data(); wrap.querySelector('#editingId').value = id; wrap.querySelector('#type').value = a.type || 'other'; wrap.querySelector('#title').value = a.title || ''; const d = dayKey(a.start); wrap.querySelector('#date').value = d; wrap.querySelector('#start').value = dayjs(a.start.toDate()).tz(TZ).format('HH:mm'); wrap.querySelector('#end').value = a.end ? dayjs(a.end.toDate()).tz(TZ).format('HH:mm') : ''; wrap.querySelector('#location').value = a.location || ''; wrap.querySelector('#notes').value = a.notes || ''; wrap.querySelector('#saveBtn').textContent = 'Spara ändringar'; wrap.querySelector('#cancelEdit').classList.remove('hidden'); })); daysEl.querySelectorAll('button.del').forEach(btn => btn.addEventListener('click', async (e) => { const id = e.currentTarget.dataset.id; if (!confirm('Ta bort aktiviteten?')) return; await deleteDoc(doc(db, 'trips', tripId, 'activities', id)); })); });
-  const signOutBtn = document.getElementById('signOutBtn'); signOutBtn.onclick = async () => { await signOut(auth); location.hash = '#/login'; };
+  onSnapshot(qActs, (snap) => {
+    const groups = {};
+    snap.forEach(docSnap => {
+      const a = docSnap.data(); a.id = docSnap.id;
+      if (!a.start) return; // guard
+      const k = dayKey(a.start);
+      (groups[k] ||= []).push(a);
+    });
+    daysEl.innerHTML = '';
+    Object.keys(groups).sort().forEach(k => {
+      const section = document.createElement('section');
+      section.innerHTML = `<h3 class="font-semibold text-lg mb-2">${dayLabel(k)}</h3>`;
+      const ul = document.createElement('ul'); ul.className = 'grid gap-2';
+      groups[k].forEach(a => {
+        const li = document.createElement('li');
+        li.className = 'p-3 rounded-2xl border bg-white flex items-center justify-between gap-3';
+        li.innerHTML = `
+          <div class="min-w-0">
+            <div class="font-medium truncate">${icon(a.type)} ${a.title}</div>
+            <div class="text-xs text-gray-500">${fmtTime(a.start)}${a.end ? '–'+fmtTime(a.end) : ''}${a.location ? ' · ' + a.location : ''}</div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <button class="edit px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">📝</button>
+            <button class="del px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">🗑️</button>
+          </div>`;
+        ul.appendChild(li);
+      });
+      section.appendChild(ul);
+      daysEl.appendChild(section);
+    });
+
+    // Wire edit/delete
+    daysEl.querySelectorAll('button.edit').forEach(btn => btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.dataset.id;
+      const ref = doc(db, 'trips', tripId, 'activities', id);
+      const s = await getDoc(ref); const a = s.data();
+      wrap.querySelector('#editingId').value = id;
+      wrap.querySelector('#type').value = a.type || 'other';
+      wrap.querySelector('#title').value = a.title || '';
+      const d = dayKey(a.start); // YYYY-MM-DD in TZ
+      wrap.querySelector('#date').value = d;
+      wrap.querySelector('#start').value = fmtTime(a.start);
+      wrap.querySelector('#end').value = a.end ? fmtTime(a.end) : '';
+      wrap.querySelector('#location').value = a.location || '';
+      wrap.querySelector('#notes').value = a.notes || '';
+      wrap.querySelector('#saveBtn').textContent = 'Spara ändringar';
+      wrap.querySelector('#cancelEdit').classList.remove('hidden');
+    }));
+    daysEl.querySelectorAll('button.del').forEach(btn => btn.addEventListener('click', async (e) => {
+      const id = e.currentTarget.dataset.id;
+      if (!confirm('Ta bort aktiviteten?')) return;
+      await deleteDoc(doc(db, 'trips', tripId, 'activities', id));
+    }));
+  });
+
+  // Sign out wiring
+  const signOutBtn = document.getElementById('signOutBtn');
+  signOutBtn.onclick = async () => { await signOut(auth); location.hash = '#/login'; };
+
   swapContent(wrap);
 }
+
 
 // ---- Expenses (M3) ----
 async function renderExpenses({ qs }){
