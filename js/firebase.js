@@ -1,10 +1,8 @@
-// Firebase init (modular CDN, no build tools)
+// Firebase init (modular CDN)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-// (Optional) Analytics – only if you want it now
-// import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// 🔐 NEW CONFIG (from your provided context)
 export const firebaseConfig = {
   apiKey: "AIzaSyA33va8PBth6HP7r1clA8QVvO08axEaOLo",
   authDomain: "japan2025-92e9d.firebaseapp.com",
@@ -18,4 +16,4 @@ export const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 await setPersistence(auth, browserLocalPersistence);
-// export const analytics = getAnalytics(app); // enable if desired
+export const db = getFirestore(app);
