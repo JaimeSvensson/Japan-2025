@@ -17,6 +17,7 @@ import {
   serverTimestamp,
   doc,
   getDoc,
+  getDocs,
   updateDoc,
   arrayUnion,
   orderBy,
@@ -115,15 +116,24 @@ function renderTrips(){
       <ul id="tripList" class="grid gap-3"></ul>
       <p id="tripMsg" class="text-sm text-red-600"></p>
     </section>`;
+
   const list = wrap.querySelector('#tripList');
   const msg = wrap.querySelector('#tripMsg');
   const uid = auth.currentUser.uid;
+
   const qTrips = query(collection(db, 'trips'), where('members', 'array-contains', uid));
   onSnapshot(qTrips, (snap) => {
     list.innerHTML = '';
-    if (snap.empty) { const li = document.createElement('li'); li.className='p-4 rounded-2xl border bg-white text-sm text-gray-600'; li.innerHTML='Inga resor ännu. Klicka <strong>Ny resa</strong> för att skapa en.'; list.appendChild(li); return; }
+    if (snap.empty) {
+      const li = document.createElement('li');
+      li.className='p-4 rounded-2xl border bg-white text-sm text-gray-600';
+      li.innerHTML='Inga resor ännu. Klicka <strong>Ny resa</strong> för att skapa en.';
+      list.appendChild(li); return;
+    }
+
     snap.forEach(docSnap => {
       const t = docSnap.data();
+      const canManage = (t.admins||[]).includes(uid) || t.createdBy === uid; // creator/admin only
       const li = document.createElement('li');
       li.className = 'p-4 rounded-2xl border bg-white flex items-center justify-between gap-3';
       li.innerHTML = `
@@ -134,23 +144,79 @@ function renderTrips(){
         <div class="flex items-center gap-2">
           <a class="px-3 py-1 rounded-xl border text-sm" href="#/expenses?trip=${docSnap.id}">Utgifter</a>
           <a class="px-3 py-1 rounded-xl border text-sm" href="#/members?trip=${docSnap.id}">Medlemmar</a>
+          ${canManage ? `<button class="renameTrip px-3 py-1 rounded-xl border text-sm" data-id="${docSnap.id}">Byt namn</button>
+                         <button class="delTrip px-3 py-1 rounded-xl border text-sm" data-id="${docSnap.id}">Ta bort</button>` : ''}
           <button class="copyInvite px-3 py-1 rounded-xl border text-sm" data-id="${docSnap.id}">Kopiera inbjudan</button>
         </div>`;
       list.appendChild(li);
     });
+
+    // copy invite (unchanged)
     list.querySelectorAll('.copyInvite').forEach(btn => btn.addEventListener('click', async (e)=>{
-      try{ const id = e.currentTarget.getAttribute('data-id'); const ref = doc(db,'trips',id); const snap2 = await getDoc(ref); const t=snap2.data(); let token=t.inviteToken; if(!token){ token = crypto.getRandomValues(new Uint8Array(8)).reduce((s,b)=>s+b.toString(16).padStart(2,'0'),''); await updateDoc(ref,{inviteToken:token,updatedAt:serverTimestamp()}); }
-        const inviteUrl = `${location.origin}${location.pathname}#/join?trip=${id}&token=${token}`; await navigator.clipboard.writeText(inviteUrl); alert('Inbjudningslänk kopierad!\n'+inviteUrl);
+      try{
+        const id = e.currentTarget.getAttribute('data-id');
+        const ref = doc(db,'trips',id);
+        const snap2 = await getDoc(ref);
+        const t=snap2.data();
+        let token=t.inviteToken;
+        if(!token){
+          token = crypto.getRandomValues(new Uint8Array(8)).reduce((s,b)=>s+b.toString(16).padStart(2,'0'),'');
+          await updateDoc(ref,{inviteToken:token,updatedAt:serverTimestamp()});
+        }
+        const inviteUrl = `${location.origin}${location.pathname}#/join?trip=${id}&token=${token}`;
+        await navigator.clipboard.writeText(inviteUrl);
+        alert('Inbjudningslänk kopierad!\n'+inviteUrl);
       }catch(err){ msg.textContent = err.message; console.error(err); }
     }));
+
+    // rename
+    list.querySelectorAll('.renameTrip').forEach(btn => btn.addEventListener('click', async (e)=>{
+      const id = e.currentTarget.getAttribute('data-id');
+      const ref = doc(db,'trips',id);
+      const snap = await getDoc(ref); const t = snap.data();
+      const next = prompt('Nytt namn för resan:', t.name || '');
+      if(!next) return;
+      try{ await updateDoc(ref, { name: next.trim(), updatedAt: serverTimestamp() }); }
+      catch(err){ alert(err.message); }
+    }));
+
+    // delete
+    list.querySelectorAll('.delTrip').forEach(btn => btn.addEventListener('click', async (e)=>{
+      const id = e.currentTarget.getAttribute('data-id');
+      if(!confirm('Ta bort resan permanent? Alla aktiviteter/utgifter/regleringar raderas.')) return;
+      try { await deleteTripCascade(id); }
+      catch(err){ alert(err.message); }
+    }));
   }, (err)=>{ msg.textContent = `${err.code||'error'} – ${err.message}`; console.error(err); });
+
+  // create new
   wrap.querySelector('#newTripBtn').addEventListener('click', async ()=>{
-    msg.textContent=''; try{ const name = prompt('Resans namn?'); if(!name) return; const currency = prompt('Standardvaluta? Skriv SEK eller JPY','SEK')?.toUpperCase()==='JPY'?'JPY':'SEK'; const timezone='Asia/Tokyo'; const token = crypto.getRandomValues(new Uint8Array(8)).reduce((s,b)=>s+b.toString(16).padStart(2,'0'),''); await addDoc(collection(db,'trips'),{name,currency,timezone,admins:[uid],members:[uid],inviteToken:token,createdAt:serverTimestamp(),updatedAt:serverTimestamp()}); }catch(err){ msg.textContent = `${err.code||'error'} – ${err.message}`; console.error(err); }
+    msg.textContent='';
+    try{
+      const name = prompt('Resans namn?'); if(!name) return;
+      const currency = prompt('Standardvaluta? Skriv SEK eller JPY','SEK')?.toUpperCase()==='JPY'?'JPY':'SEK';
+      const timezone='Asia/Tokyo';
+      const token = crypto.getRandomValues(new Uint8Array(8)).reduce((s,b)=>s+b.toString(16).padStart(2,'0'),'');
+      await addDoc(collection(db,'trips'),{
+        name,
+        currency,
+        timezone,
+        admins:[uid],      // admin = creator
+        members:[uid],
+        createdBy: uid,    // set creator for clarity
+        inviteToken:token,
+        createdAt:serverTimestamp(),
+        updatedAt:serverTimestamp()
+      });
+    }catch(err){ msg.textContent = `${err.code||'error'} – ${err.message}`; console.error(err); }
   });
-  const signOutBtn = document.getElementById('signOutBtn'); signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
+
+  // header sign out
+  const signOutBtn = document.getElementById('signOutBtn');
+  signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
+
   swapContent(wrap);
 }
-
 // ---- Join ----
 async function renderJoin({ qs }){
   const wrap = document.createElement('div'); wrap.className='min-h-[50vh] grid place-items-center';
@@ -284,6 +350,15 @@ async function renderPlanner({ qs }) {
 
   const signOutBtn = document.getElementById('signOutBtn');
   signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
+}
+async function deleteTripCascade(tripId) {
+  const colls = ['activities', 'expenses', 'settlements', 'members'];
+  for (const c of colls) {
+    const snap = await getDocs(collection(db, 'trips', tripId, c));
+    const deletions = snap.docs.map(d => deleteDoc(doc(db, 'trips', tripId, c, d.id)));
+    await Promise.all(deletions);
+  }
+  await deleteDoc(doc(db, 'trips', tripId));
 }
 
 // ---- Members (trip-local display names) ----
