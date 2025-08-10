@@ -1,35 +1,3 @@
-==============================
-= Firestore Rules (paste & Publish)
-==============================
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-
-    function isAuthed() { return request.auth != null; }
-    function isMember(tripId) {
-      return isAuthed() &&
-        get(/databases/$(database)/documents/trips/$(tripId)).data.members.hasAny([request.auth.uid]);
-    }
-
-    match /trips/{tripId} {
-      // Create allowed if creator includes themself as a member
-      allow create: if isAuthed() && request.resource.data.members.hasAny([request.auth.uid]);
-      // Read & update only for members
-      allow read, update: if isMember(tripId);
-      // Delete only for admins
-      allow delete: if isMember(tripId) && get(resource.path).data.admins.hasAny([request.auth.uid]);
-
-      match /{document=**} {
-        allow read, write: if isMember(tripId);
-      }
-    }
-  }
-}
-
-
-==============================
-= js/app.js — add error handling for read/write
-==============================
 import { auth, db } from './firebase.js';
 import {
   onAuthStateChanged,
@@ -309,12 +277,3 @@ function randomToken(n = 16){
   crypto.getRandomValues(bytes);
   return Array.from(bytes).map(b => b.toString(16).padStart(2,'0')).join('');
 }
-
-
-==============================
-= Quick checklist if trips don't show
-==============================
-1) In Firebase Console → **Firestore Database**: make sure the DB is **created** (choose a location) and not just the project.
-2) Paste the **rules above** under **Rules** and **Publish**.
-3) Hard refresh the app (DevTools → Network → Disable cache → reload) and try **Ny resa** again.
-4) If an error appears under the list, tell me the exact code (e.g. `permission-denied`).
