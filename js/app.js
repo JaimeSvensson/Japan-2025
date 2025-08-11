@@ -25,6 +25,10 @@ import {
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+const $ = (id) => document.getElementById(id);
+const addClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.add(cls); };
+const removeClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.remove(cls); };
+
 function toast(message, type = 'success', ms = 2800){
   const host = document.getElementById('toaster');
   if(!host) return alert(message);
@@ -63,14 +67,13 @@ window.addEventListener('hashchange', navigate);
 
 // ---- Auth state ----
 onAuthStateChanged(auth, (user) => {
-  const userArea = document.getElementById('userArea');
-  const userName = document.getElementById('userName');
+  const nameEl = $('userName');
+  if (nameEl) nameEl.textContent = user?.displayName || user?.email || 'Inloggad';
+
+  // Styr bara routing; rör inte element som ev. inte finns
   if (user) {
-    userArea.classList.remove('hidden');
-    userName.textContent = user.displayName || user.email || 'Inloggad';
     if (!location.hash || location.hash === '#/login') location.replace('#/trips');
   } else {
-    userArea.classList.add('hidden');
     if (location.hash !== '#/login') location.replace('#/login');
   }
   navigate();
@@ -225,8 +228,8 @@ function renderTrips(){
   });
 
   // header sign out
-  const signOutBtn = document.getElementById('signOutBtn');
-  signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
+  const signOutBtn = $('signOutBtn');
+  if (signOutBtn) signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
 
   swapContent(wrap);
 }
@@ -361,8 +364,8 @@ async function renderPlanner({ qs }) {
     daysEl.querySelectorAll('button.del').forEach(btn=>btn.addEventListener('click', async(e)=>{ const id=e.currentTarget.dataset.id; if(!confirm('Ta bort aktiviteten?')) return; await deleteDoc(doc(db,'trips',tripId,'activities',id)); }));
   });
 
-  const signOutBtn = document.getElementById('signOutBtn');
-  signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
+  const signOutBtn = $('signOutBtn');
+  if (signOutBtn) signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
 }
 async function deleteTripCascade(tripId) {
   const colls = ['activities', 'expenses', 'settlements', 'members'];
@@ -647,8 +650,8 @@ async function renderExpenses({ qs }) {
   });
   function renderSuggestions(list){ suggestionsEl.innerHTML=''; if(list.length===0){ suggestionsEl.textContent='Inga överföringar föreslagna – alla är kvitt.'; return; } list.forEach(s=>{ const row=document.createElement('div'); row.className='flex items-center justify-between rounded-xl border p-2'; row.innerHTML=`<div>${nameOf(s.from)} → ${nameOf(s.to)}: <strong>${fmtMoney(s.amount,baseC)}</strong></div>`; const btn=document.createElement('button'); btn.className='px-3 py-1 rounded-xl border text-sm'; btn.textContent='Markera som reglerad'; btn.addEventListener('click', async()=>{ await addDoc(collection(db,'trips',tripId,'settlements'),{ from:s.from,to:s.to,amountMinor:s.amount,currency:baseC,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid }); }); row.appendChild(btn); suggestionsEl.appendChild(row); }); }
 
-  const signOutBtn = document.getElementById('signOutBtn');
-  signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
+  const signOutBtn = $('signOutBtn');
+  if (signOutBtn) signOutBtn.onclick = async ()=>{ await signOut(auth); location.hash='#/login'; };
 }
 
 // ---- Not Found ----
