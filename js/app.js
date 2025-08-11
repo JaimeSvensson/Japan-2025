@@ -25,6 +25,19 @@ import {
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+function toast(message, type = 'success', ms = 2800){
+  const host = document.getElementById('toaster');
+  if(!host) return alert(message);
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = message;
+  host.appendChild(el);
+  requestAnimationFrame(()=> el.classList.add('show'));
+  setTimeout(()=>{
+    el.classList.remove('show');
+    el.addEventListener('transitionend', ()=> el.remove(), { once:true });
+  }, ms);
+}
 const view = document.getElementById('view');
 
 // ---- Router ----
