@@ -1,1 +1,10 @@
+{
+  "name": "Japan2025",
+  "short_name": "Japan2025",
+  "start_url": "/Japan-2025/#/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0ea5e9",
+  "icons": []
+}
 
