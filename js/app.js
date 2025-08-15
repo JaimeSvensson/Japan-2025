@@ -264,7 +264,7 @@ function renderTrips(){
   swapContent(wrap);
 }
 // ---- Join ----
-// >>> PATCH: renderJoin – include inviteToken in update + show errors
+// >>> PATCH: renderJoin – write-then-read, uses token without pre-read
 async function renderJoin({ qs }){
   const wrap = document.createElement('div');
   wrap.className = 'min-h-[50vh] grid place-items-center';
@@ -278,30 +278,20 @@ async function renderJoin({ qs }){
   }
 
   try {
-    const ref  = doc(db, 'trips', tripId);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) {
-      wrap.innerHTML = '<div class="text-center">Hittar inte resan</div>';
-      return swapContent(wrap);
-    }
-    const t = snap.data();
+    const ref = doc(db, 'trips', tripId);
 
-    // Token måste matcha dokumentets inviteToken
-    if (t.inviteToken !== token) {
-      wrap.innerHTML = '<div class="text-center">Fel inbjudningslänk</div>';
-      return swapContent(wrap);
-    }
-
-    // Lägg till aktuell användare i members om inte redan med
+    // 1) Försök gå med direkt (utan att läsa först).
+    //    Skicka med token oförändrad – reglerna jämför mot resource.data.inviteToken
     const uid = auth.currentUser.uid;
-    if (!t.members?.includes(uid)) {
-      await updateDoc(ref, {
-        members: arrayUnion(uid),
-        // Skicka med samma inviteToken oförändrat – krävs av reglerna
-        inviteToken: t.inviteToken,
-        updatedAt: serverTimestamp()
-      });
-    }
+    await updateDoc(ref, {
+      members: arrayUnion(uid),
+      inviteToken: token,       // <- viktigt: skickas med oförändrat
+      updatedAt: serverTimestamp()
+    });
+
+    // 2) Nu är du medlem -> det är säkert att läsa dokumentet.
+    const snap = await getDoc(ref);
+    const t = snap.exists() ? snap.data() : { name: 'Resa' };
 
     wrap.innerHTML = `
       <div class="text-center">
@@ -310,6 +300,7 @@ async function renderJoin({ qs }){
       </div>`;
   } catch (err) {
     console.error(err);
+    // Vanligast här: permission-denied pga regler saknas/inte publicerade eller fel token
     wrap.innerHTML = `
       <div class="text-center">
         <p class="text-red-600 mb-2">Kunde inte gå med i resan: ${err.code || ''} ${err.message || ''}</p>
@@ -320,7 +311,6 @@ async function renderJoin({ qs }){
   swapContent(wrap);
 }
 // <<< PATCH
-
 
 // ---- Planner (unchanged from M3 with TZ fix) ----
 async function renderPlanner({ qs }) {
