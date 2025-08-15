@@ -30,6 +30,13 @@ const addClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.add(c
 const removeClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.remove(cls); };
 const getNext = () => sessionStorage.getItem('next') || '#/trips';
 const setNext = (hash) => sessionStorage.setItem('next', hash?.startsWith('#') ? hash : `#${hash || '/trips'}`);
+const readNext = () => {
+  const raw = (location.hash || '').replace(/^#+/, '');
+  const qs  = new URLSearchParams(raw.split('?')[1] || '');
+  const fromUrl = qs.get('next');
+  if (fromUrl) return decodeURIComponent(fromUrl);
+  return sessionStorage.getItem('next') || '#/trips';
+};
 // >>> PATCH: capture join target on boot
 if (!auth.currentUser && location.hash.startsWith('#/join')) {
   // Spara målet så login kan hoppa tillbaka hit
@@ -74,7 +81,7 @@ function navigate(){
 window.addEventListener('hashchange', navigate);
 
 // ---- Auth state ----
-// >>> PATCH: prefer saved "next" (e.g., #/join?...) after login
+// >>> PATCH: prefer saved/URL "next"; carry next in the URL to survive storage issues
 onAuthStateChanged(auth, (user) => {
   const nameEl = $('userName');
   if (nameEl) nameEl.textContent = user?.displayName || user?.email || 'Inloggad';
@@ -83,17 +90,18 @@ onAuthStateChanged(auth, (user) => {
   const currentPath = '/' + raw.split('?')[0].replace(/^\/*/, '');
 
   if (!user) {
-    // Utloggad: om vi inte redan står på /login, kom ihåg mål och gå till login
+    // Inte inloggad → om vi inte står på /login, spara målet och gå till /login?next=…
     if (currentPath !== '/login') {
       const want = location.hash || '#/trips';
       sessionStorage.setItem('next', want);
-      location.replace('#/login');
+      location.replace(`#/login?next=${encodeURIComponent(want)}`);
       return;
     }
   } else {
-    // Inloggad: om vi har ett sparat mål (t.ex. /join) – hoppa dit
-    const saved = sessionStorage.getItem('next');
-    if (saved && (currentPath === '/login' || currentPath === '/trips')) {
+    // Inloggad → om vi har next (i URL eller storage) och står på /login eller /trips, hoppa dit
+    const saved = readNext();
+    const hasExplicitNext = /\bnext=/.test(raw) || !!sessionStorage.getItem('next');
+    if (hasExplicitNext && (currentPath === '/login' || currentPath === '/trips')) {
       sessionStorage.removeItem('next');
       location.replace(saved);
       return;
@@ -103,6 +111,7 @@ onAuthStateChanged(auth, (user) => {
   navigate();
 });
 // <<< PATCH
+
 
 // >>> PATCH: authGuard remembers target
 function authGuard(viewFn){
@@ -154,16 +163,16 @@ function renderLogin(){
   e.preventDefault(); msg.textContent='';
   try {
     await signInWithEmailAndPassword(auth, byId('email').value, byId('password').value);
-    const next = sessionStorage.getItem('next') || '#/trips';
+    const next = readNext();
     sessionStorage.removeItem('next');
-    location.replace(next);   // <- använd replace för att undvika back-steg till /login
+    location.replace(next); // <- använd replace för att undvika back-steg till /login
   } catch(err){ msg.textContent = err.message; }
 });
   wrap.querySelector('#registerBtn').addEventListener('click', async ()=>{
   msg.textContent='';
   try{
     await createUserWithEmailAndPassword(auth, byId('email').value, byId('password').value);
-    const next = sessionStorage.getItem('next') || '#/trips';
+    const next = readNext();
     sessionStorage.removeItem('next');
     location.replace(next);
   }catch(err){ msg.textContent = err.message; }
@@ -172,7 +181,7 @@ function renderLogin(){
   msg.textContent='';
   try{
     await signInWithPopup(auth, new GoogleAuthProvider());
-    const next = sessionStorage.getItem('next') || '#/trips';
+    const next = readNext();
     sessionStorage.removeItem('next');
     location.replace(next);
   }catch(err){ msg.textContent = err.message; }
