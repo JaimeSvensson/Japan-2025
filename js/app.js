@@ -363,7 +363,6 @@ async function renderJoin({ qs }){
 }
 // <<< PATCH
 
-// ---- Planner (unchanged from M3 with TZ fix) ----
 async function renderPlanner({ qs }) {
   const tripId = qs.get('trip');
   const wrap = document.createElement('div');
@@ -412,7 +411,6 @@ async function renderPlanner({ qs }) {
             <input id="timeTo" type="time" class="mt-1 w-full rounded-xl border px-3 py-2" />
           </label>
         </div>
-          </div>
           <label class="text-sm md:col-span-2">Plats
             <input id="location" class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="t.ex. Tokyo Station" />
           </label>
@@ -466,7 +464,9 @@ async function renderPlanner({ qs }) {
       const timeTo   = byId('timeTo').value;
       const location=byId('location').value?.trim();
       const notes=byId('notes').value?.trim();
-      if(!title||!date||!start) throw new Error('Titel, från-datum och från-tid krävs.');
+      if (!title || !dateFrom || !timeFrom) {
+        throw new Error('Titel, från-datum och från-tid krävs.');
+      }
       const startTs = toTs(dateFrom, timeFrom);
       let endTs = null;
       
