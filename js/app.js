@@ -782,6 +782,7 @@ async function renderExpenses({ qs }) {
   
     previewBase();
   }
+
   function previewBase(){ const c=currSel.value; const amt=toMinor(amountInput.value,c); let baseMinor=amt; if(c!==baseC){ const r=Number(rateInput.value||'0'); if(r>0){ const major=amt/Math.pow(10,dec(c)); baseMinor=Math.round(major*r*Math.pow(10,dec(baseC))); } } basePreview.textContent = amt?`≈ ${fmtMoney(baseMinor,baseC)} i ${baseC}`:''; return baseMinor; }
   function getSelectedMembers(){ return Array.from(involvedEl.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.value);} 
   // --- JPY -> SEK via öppet API (dagscache i localStorage) ---
@@ -843,7 +844,7 @@ function equalize(){
   if (baseC === 'SEK' && currSel.value === 'JPY') {
     try {
       const rate = await fetchJPYtoSEK();
-      const rounded = Math.round(autoRate.rate * 1000) / 1000;
+      const rounded = Math.round(rate * 1000) / 1000;
       rateInput.value = String(rounded);
       previewBase();
     } catch (err) {
