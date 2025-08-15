@@ -28,8 +28,12 @@
   <body class="bg-gray-50 text-gray-900">
     <header class="app-header sticky top-0 z-10 bg-white/90 backdrop-blur border-b">
       <div class="max-w-3xl mx-auto p-3 flex items-center justify-between gap-3">
-        <a href="#/trips" class="font-semibold flex items-center gap-2">
-          <span class="text-xl leading-none">🇯🇵</span>
+        <a href="#/trips" class="app-logo flex items-center gap-2 font-semibold">
+          <!-- Japan flag (inline SVG, no external deps) -->
+          <svg class="flag-jp" width="20" height="14" viewBox="0 0 3 2" aria-hidden="true">
+            <rect width="3" height="2" fill="#fff"></rect>
+            <circle cx="1.5" cy="1" r="0.6" fill="#bc002d"></circle>
+          </svg>
           <span>Japan 2025</span>
         </a>
         <div class="flex items-center gap-2">
