@@ -25,6 +25,12 @@ import {
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// >>> PATCH: capture join target on boot (optional safety)
+if (!auth.currentUser && location.hash.startsWith('#/join')) {
+  setNext(location.hash);
+}
+// <<< PATCH
+
 const $ = (id) => document.getElementById(id);
 const addClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.add(cls); };
 const removeClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.remove(cls); };
@@ -60,14 +66,17 @@ function toast(message, type = 'success', ms = 2800){
 const view = document.getElementById('view');
 
 // ---- Router ----
+// >>> PATCH: make /join public so we can capture it, and self-guard inside renderJoin
 const routes = {
   '/login': renderLogin,
   '/trips': authGuard(renderTrips),
-  '/join': authGuard(renderJoin),
+  '/join': renderJoin,                // <— no authGuard here
   '/planner': authGuard(renderPlanner),
   '/expenses': authGuard(renderExpenses),
   '/members': authGuard(renderMembers)
 };
+// <<< PATCH
+
 function parseRoute(){
   const raw = (location.hash || '#/login').replace(/^#+/, '');
   const [pathRaw, qsRaw] = raw.split('?');
@@ -80,8 +89,8 @@ function navigate(){
 }
 window.addEventListener('hashchange', navigate);
 
+// >>> PATCH: preserve and prefer "next" (e.g. /join?...)
 // ---- Auth state ----
-// >>> PATCH: prefer saved/URL "next"; carry next in the URL to survive storage issues
 onAuthStateChanged(auth, (user) => {
   const nameEl = $('userName');
   if (nameEl) nameEl.textContent = user?.displayName || user?.email || 'Inloggad';
@@ -90,28 +99,24 @@ onAuthStateChanged(auth, (user) => {
   const currentPath = '/' + raw.split('?')[0].replace(/^\/*/, '');
 
   if (!user) {
-    // Inte inloggad → om vi inte står på /login, spara målet och gå till /login?next=…
     if (currentPath !== '/login') {
       const want = location.hash || '#/trips';
-      sessionStorage.setItem('next', want);
+      setNext(want);
       location.replace(`#/login?next=${encodeURIComponent(want)}`);
       return;
     }
   } else {
-    // Inloggad → om vi har next (i URL eller storage) och står på /login eller /trips, hoppa dit
     const saved = readNext();
-    const hasExplicitNext = /\bnext=/.test(raw) || !!sessionStorage.getItem('next');
-    if (hasExplicitNext && (currentPath === '/login' || currentPath === '/trips')) {
+    const hasNext = /\bnext=/.test(raw) || !!sessionStorage.getItem('next');
+    if (hasNext && (currentPath === '/login' || currentPath === '/trips')) {
       sessionStorage.removeItem('next');
       location.replace(saved);
       return;
     }
   }
-
   navigate();
 });
 // <<< PATCH
-
 
 // >>> PATCH: authGuard remembers target
 function authGuard(viewFn){
@@ -164,8 +169,8 @@ function renderLogin(){
   try {
     await signInWithEmailAndPassword(auth, byId('email').value, byId('password').value);
     const next = readNext();
-    sessionStorage.removeItem('next');
-    location.replace(next); // <- använd replace för att undvika back-steg till /login
+sessionStorage.removeItem('next');
+location.replace(next);
   } catch(err){ msg.textContent = err.message; }
 });
   wrap.querySelector('#registerBtn').addEventListener('click', async ()=>{
@@ -173,8 +178,8 @@ function renderLogin(){
   try{
     await createUserWithEmailAndPassword(auth, byId('email').value, byId('password').value);
     const next = readNext();
-    sessionStorage.removeItem('next');
-    location.replace(next);
+sessionStorage.removeItem('next');
+location.replace(next);
   }catch(err){ msg.textContent = err.message; }
 });
   wrap.querySelector('#googleBtn').addEventListener('click', async ()=>{
@@ -182,8 +187,8 @@ function renderLogin(){
   try{
     await signInWithPopup(auth, new GoogleAuthProvider());
     const next = readNext();
-    sessionStorage.removeItem('next');
-    location.replace(next);
+sessionStorage.removeItem('next');
+location.replace(next);
   }catch(err){ msg.textContent = err.message; }
 });
   swapContent(wrap);
@@ -303,7 +308,7 @@ function renderTrips(){
   swapContent(wrap);
 }
 // ---- Join ----
-// >>> PATCH: renderJoin – write-then-read, uses token without pre-read
+// >>> PATCH: renderJoin – self-guard + write-then-read
 async function renderJoin({ qs }){
   const wrap = document.createElement('div');
   wrap.className = 'min-h-[50vh] grid place-items-center';
@@ -316,19 +321,26 @@ async function renderJoin({ qs }){
     return swapContent(wrap);
   }
 
+  // Not logged in? send to login and carry next in URL + session
+  if (!auth.currentUser) {
+    const want = `#/join?trip=${encodeURIComponent(tripId)}&token=${encodeURIComponent(token)}`;
+    setNext(want);
+    location.replace(`#/login?next=${encodeURIComponent(want)}`);
+    return;
+  }
+
   try {
     const ref = doc(db, 'trips', tripId);
-
-    // 1) Försök gå med direkt (utan att läsa först).
-    //    Skicka med token oförändrad – reglerna jämför mot resource.data.inviteToken
     const uid = auth.currentUser.uid;
+
+    // Write first: add self using the URL token (rules compare against resource.inviteToken)
     await updateDoc(ref, {
       members: arrayUnion(uid),
-      inviteToken: token,       // <- viktigt: skickas med oförändrat
+      inviteToken: token,
       updatedAt: serverTimestamp()
     });
 
-    // 2) Nu är du medlem -> det är säkert att läsa dokumentet.
+    // Now read (you are a member)
     const snap = await getDoc(ref);
     const t = snap.exists() ? snap.data() : { name: 'Resa' };
 
@@ -339,7 +351,6 @@ async function renderJoin({ qs }){
       </div>`;
   } catch (err) {
     console.error(err);
-    // Vanligast här: permission-denied pga regler saknas/inte publicerade eller fel token
     wrap.innerHTML = `
       <div class="text-center">
         <p class="text-red-600 mb-2">Kunde inte gå med i resan: ${err.code || ''} ${err.message || ''}</p>
