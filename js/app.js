@@ -762,7 +762,26 @@ async function renderExpenses({ qs }) {
   const settlementsList = byId('settlementsList');
   const suggestionsEl = byId('suggestions');
 
-  function updateRateLabel(){ const c=currSel.value; if(c===baseC){ rateLabel.textContent='1:1'; rateInput.disabled=true; rateInput.value=''; } else { rateInput.disabled=false; if(c==='JPY'&&baseC==='SEK'){rateLabel.textContent = '1 JPY → SEK' + (autoRate?.date ? ` · ${autoRate.date}` : '');} else if(c==='SEK'&&baseC==='JPY') rateLabel.textContent='1 SEK → JPY'; else rateLabel.textContent=`1 ${c} → ${baseC}`; } previewBase(); }
+  function updateRateLabel(){
+    const c = currSel.value;
+  
+    if (c === baseC) {
+      rateLabel.textContent = '1:1';
+      rateInput.disabled = true;
+      rateInput.value = '';
+    } else {
+      rateInput.disabled = false;
+      if (c === 'JPY' && baseC === 'SEK') {
+        rateLabel.textContent = '1 JPY → SEK';
+      } else if (c === 'SEK' && baseC === 'JPY') {
+        rateLabel.textContent = '1 SEK → JPY';
+      } else {
+        rateLabel.textContent = `1 ${c} → ${baseC}`;
+      }
+    }
+  
+    previewBase();
+  }
   function previewBase(){ const c=currSel.value; const amt=toMinor(amountInput.value,c); let baseMinor=amt; if(c!==baseC){ const r=Number(rateInput.value||'0'); if(r>0){ const major=amt/Math.pow(10,dec(c)); baseMinor=Math.round(major*r*Math.pow(10,dec(baseC))); } } basePreview.textContent = amt?`≈ ${fmtMoney(baseMinor,baseC)} i ${baseC}`:''; return baseMinor; }
   function getSelectedMembers(){ return Array.from(involvedEl.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.value);} 
   // --- JPY -> SEK via öppet API (dagscache i localStorage) ---
