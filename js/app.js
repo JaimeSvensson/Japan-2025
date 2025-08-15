@@ -30,6 +30,12 @@ const addClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.add(c
 const removeClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.remove(cls); };
 const getNext = () => sessionStorage.getItem('next') || '#/trips';
 const setNext = (hash) => sessionStorage.setItem('next', hash?.startsWith('#') ? hash : `#${hash || '/trips'}`);
+// >>> PATCH: capture join target on boot
+if (!auth.currentUser && location.hash.startsWith('#/join')) {
+  // Spara målet så login kan hoppa tillbaka hit
+  sessionStorage.setItem('next', location.hash);
+}
+// <<< PATCH
 
 function toast(message, type = 'success', ms = 2800){
   const host = document.getElementById('toaster');
@@ -68,32 +74,32 @@ function navigate(){
 window.addEventListener('hashchange', navigate);
 
 // ---- Auth state ----
-// >>> PATCH: preserve invite target ("next") across login
+// >>> PATCH: prefer saved "next" (e.g., #/join?...) after login
 onAuthStateChanged(auth, (user) => {
   const nameEl = $('userName');
   if (nameEl) nameEl.textContent = user?.displayName || user?.email || 'Inloggad';
 
-  // figure out current path (e.g. /login, /join, /trips)
   const raw = (location.hash || '#/login').replace(/^#+/, '');
   const currentPath = '/' + raw.split('?')[0].replace(/^\/*/, '');
 
   if (!user) {
-    // if logged out and we're not already on /login, remember target and go to /login
+    // Utloggad: om vi inte redan står på /login, kom ihåg mål och gå till login
     if (currentPath !== '/login') {
-      setNext(location.hash || '#/trips');
+      const want = location.hash || '#/trips';
+      sessionStorage.setItem('next', want);
       location.replace('#/login');
-      return; // stop here; the URL will change
+      return;
     }
   } else {
-    // if logged in and currently on /login, jump to the remembered target
-    if (currentPath === '/login') {
-      const next = getNext(); sessionStorage.removeItem('next');
-      location.replace(next);
-      return; // stop here; the URL will change
+    // Inloggad: om vi har ett sparat mål (t.ex. /join) – hoppa dit
+    const saved = sessionStorage.getItem('next');
+    if (saved && (currentPath === '/login' || currentPath === '/trips')) {
+      sessionStorage.removeItem('next');
+      location.replace(saved);
+      return;
     }
   }
 
-  // otherwise just render current route
   navigate();
 });
 // <<< PATCH
@@ -144,9 +150,33 @@ function renderLogin(){
       <p id="authMsg" class="text-sm text-red-600 mt-3"></p>
     </section>`;
   const msg = wrap.querySelector('#authMsg');
-  wrap.querySelector('#emailForm').addEventListener('submit', async (e)=>{ e.preventDefault(); msg.textContent=''; try{ await signInWithEmailAndPassword(auth, byId('email').value, byId('password').value); const next = getNext(); sessionStorage.removeItem('next'); location.hash = next; }catch(err){ msg.textContent = err.message; }});
-  wrap.querySelector('#registerBtn').addEventListener('click', async ()=>{ msg.textContent=''; try{ await createUserWithEmailAndPassword(auth, byId('email').value, byId('password').value); const next = getNext(); sessionStorage.removeItem('next'); location.hash = next; }catch(err){ msg.textContent = err.message; }});
-  wrap.querySelector('#googleBtn').addEventListener('click', async ()=>{ msg.textContent=''; try{ await signInWithPopup(auth, new GoogleAuthProvider()); const next = getNext(); sessionStorage.removeItem('next'); location.hash = next; }catch(err){ msg.textContent = err.message; }});
+  wrap.querySelector('#emailForm').addEventListener('submit', async (e)=>{
+  e.preventDefault(); msg.textContent='';
+  try {
+    await signInWithEmailAndPassword(auth, byId('email').value, byId('password').value);
+    const next = sessionStorage.getItem('next') || '#/trips';
+    sessionStorage.removeItem('next');
+    location.replace(next);   // <- använd replace för att undvika back-steg till /login
+  } catch(err){ msg.textContent = err.message; }
+});
+  wrap.querySelector('#registerBtn').addEventListener('click', async ()=>{
+  msg.textContent='';
+  try{
+    await createUserWithEmailAndPassword(auth, byId('email').value, byId('password').value);
+    const next = sessionStorage.getItem('next') || '#/trips';
+    sessionStorage.removeItem('next');
+    location.replace(next);
+  }catch(err){ msg.textContent = err.message; }
+});
+  wrap.querySelector('#googleBtn').addEventListener('click', async ()=>{
+  msg.textContent='';
+  try{
+    await signInWithPopup(auth, new GoogleAuthProvider());
+    const next = sessionStorage.getItem('next') || '#/trips';
+    sessionStorage.removeItem('next');
+    location.replace(next);
+  }catch(err){ msg.textContent = err.message; }
+});
   swapContent(wrap);
 }
 
