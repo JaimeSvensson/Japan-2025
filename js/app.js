@@ -25,12 +25,6 @@ import {
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// >>> PATCH: capture join target on boot (optional safety)
-if (!auth.currentUser && location.hash.startsWith('#/join')) {
-  setNext(location.hash);
-}
-// <<< PATCH
-
 const $ = (id) => document.getElementById(id);
 const addClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.add(cls); };
 const removeClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.remove(cls); };
