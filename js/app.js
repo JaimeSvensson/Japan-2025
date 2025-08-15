@@ -762,9 +762,26 @@ async function renderExpenses({ qs }) {
   const settlementsList = byId('settlementsList');
   const suggestionsEl = byId('suggestions');
 
-  function updateRateLabel(){ const c=currSel.value; if(c===baseC){ rateLabel.textContent='1:1'; rateInput.disabled=true; rateInput.value=''; } else { rateInput.disabled=false; if(c==='JPY'&&baseC==='SEK') rateLabel.textContent='1 JPY → SEK'; else if(c==='SEK'&&baseC==='JPY') rateLabel.textContent='1 SEK → JPY'; else rateLabel.textContent=`1 ${c} → ${baseC}`; } previewBase(); }
+  function updateRateLabel(){ const c=currSel.value; if(c===baseC){ rateLabel.textContent='1:1'; rateInput.disabled=true; rateInput.value=''; } else { rateInput.disabled=false; if(c==='JPY'&&baseC==='SEK'){rateLabel.textContent = '1 JPY → SEK' + (autoRate?.date ? ` · ${autoRate.date}` : '');} else if(c==='SEK'&&baseC==='JPY') rateLabel.textContent='1 SEK → JPY'; else rateLabel.textContent=`1 ${c} → ${baseC}`; } previewBase(); }
   function previewBase(){ const c=currSel.value; const amt=toMinor(amountInput.value,c); let baseMinor=amt; if(c!==baseC){ const r=Number(rateInput.value||'0'); if(r>0){ const major=amt/Math.pow(10,dec(c)); baseMinor=Math.round(major*r*Math.pow(10,dec(baseC))); } } basePreview.textContent = amt?`≈ ${fmtMoney(baseMinor,baseC)} i ${baseC}`:''; return baseMinor; }
   function getSelectedMembers(){ return Array.from(involvedEl.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.value);} 
+  // --- JPY -> SEK via öppet API (dagscache i localStorage) ---
+  async function fetchJPYtoSEK() {
+    const today = dayjs().format('YYYY-MM-DD');
+    const key = `JPY_SEK_${today}`;
+    const cached = localStorage.getItem(key);
+    if (cached) return Number(cached);
+  
+    const res = await fetch('https://api.frankfurter.app/latest?from=JPY&to=SEK', { cache: 'no-store' });    if (!res.ok) throw new Error('Kunde inte hämta kurs (API).');
+    const data = await res.json();
+    const rate = data && data.rates && typeof data.rates.SEK === 'number' ? data.rates.SEK : null;
+    if (!rate) throw new Error('Oväntat svar från kurs-API.');
+  
+    // rensa äldre cache-nycklar för JPY_SEK_
+    Object.keys(localStorage).forEach(k => { if (k.startsWith('JPY_SEK_') && k !== key) localStorage.removeItem(k); });
+    localStorage.setItem(key, String(rate));
+    return rate;
+  }
   function renderSplitInputs(){
   splitArea.innerHTML='';
   const sel=getSelectedMembers();
@@ -802,13 +819,31 @@ function equalize(){
   // Prefill + wire
   const todayTZ = dayjs().tz(TZ).format('YYYY-MM-DD');
   dateInput.value = todayTZ;
-  currSel.addEventListener('change',updateRateLabel);
+  currSel.addEventListener('change', async () => {
+  updateRateLabel();
+  if (baseC === 'SEK' && currSel.value === 'JPY') {
+    try {
+      const rate = await fetchJPYtoSEK();
+      rateInput.value = String(rate);
+      previewBase();
+    } catch (err) {
+      console.error(err);
+      // Låt manuell inmatning gälla om hämtningen misslyckas
+    }
+  }
+});
   rateInput.addEventListener('input',previewBase);
   amountInput.addEventListener('input',previewBase);
   modeSel.addEventListener('change',renderSplitInputs);
   involvedEl.addEventListener('change',renderSplitInputs);
   byId('equalBtn').addEventListener('click',equalize);
   updateRateLabel();
+
+  if (baseC === 'SEK' && currSel.value === 'JPY') {
+  fetchJPYtoSEK()
+    .then(rate => { rateInput.value = String(rate); previewBase(); })
+    .catch(() => {/* tyst fallback till manuell kurs */});
+}
 
   // Names live
   onSnapshot(collection(db,'trips',tripId,'members'), (snap)=>{ snap.forEach(ds=>{ const d=ds.data(); if(d?.displayName) nameMap[ds.id]=d.displayName; }); populateMembersUI(); renderSplitInputs(); });
