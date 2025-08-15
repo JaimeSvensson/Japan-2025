@@ -264,16 +264,63 @@ function renderTrips(){
   swapContent(wrap);
 }
 // ---- Join ----
+// >>> PATCH: renderJoin – include inviteToken in update + show errors
 async function renderJoin({ qs }){
-  const wrap = document.createElement('div'); wrap.className='min-h-[50vh] grid place-items-center';
-  const tripId = qs.get('trip'); const token = qs.get('token');
-  if (!tripId || !token) { wrap.innerHTML='<div class="text-center">Ogiltig inbjudan</div>'; return swapContent(wrap); }
-  const ref = doc(db,'trips',tripId); const snap = await getDoc(ref); if(!snap.exists()){ wrap.innerHTML='<div class="text-center">Hittar inte resan</div>'; return swapContent(wrap);} const t=snap.data();
-  if (t.inviteToken !== token) { wrap.innerHTML='<div class="text-center">Fel inbjudningslänk</div>'; return swapContent(wrap); }
-  const uid = auth.currentUser.uid; if (!t.members?.includes(uid)) { await updateDoc(ref,{members:arrayUnion(uid),updatedAt:serverTimestamp()}); }
-  wrap.innerHTML = `<div class="text-center"><h2 class="text-xl font-semibold mb-2">Du har gått med i: ${t.name}</h2><a href="#/trips" class="mt-3 inline-block px-3 py-2 rounded-xl bg-black text-white">Till resor</a></div>`;
+  const wrap = document.createElement('div');
+  wrap.className = 'min-h-[50vh] grid place-items-center';
+
+  const tripId = qs.get('trip');
+  const token  = qs.get('token');
+
+  if (!tripId || !token) {
+    wrap.innerHTML = '<div class="text-center">Ogiltig inbjudan</div>';
+    return swapContent(wrap);
+  }
+
+  try {
+    const ref  = doc(db, 'trips', tripId);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      wrap.innerHTML = '<div class="text-center">Hittar inte resan</div>';
+      return swapContent(wrap);
+    }
+    const t = snap.data();
+
+    // Token måste matcha dokumentets inviteToken
+    if (t.inviteToken !== token) {
+      wrap.innerHTML = '<div class="text-center">Fel inbjudningslänk</div>';
+      return swapContent(wrap);
+    }
+
+    // Lägg till aktuell användare i members om inte redan med
+    const uid = auth.currentUser.uid;
+    if (!t.members?.includes(uid)) {
+      await updateDoc(ref, {
+        members: arrayUnion(uid),
+        // Skicka med samma inviteToken oförändrat – krävs av reglerna
+        inviteToken: t.inviteToken,
+        updatedAt: serverTimestamp()
+      });
+    }
+
+    wrap.innerHTML = `
+      <div class="text-center">
+        <h2 class="text-xl font-semibold mb-2">Du har gått med i: ${t.name || 'Resa'}</h2>
+        <a href="#/trips" class="mt-3 inline-block px-3 py-2 rounded-xl bg-black text-white">Till resor</a>
+      </div>`;
+  } catch (err) {
+    console.error(err);
+    wrap.innerHTML = `
+      <div class="text-center">
+        <p class="text-red-600 mb-2">Kunde inte gå med i resan: ${err.code || ''} ${err.message || ''}</p>
+        <a href="#/trips" class="inline-block px-3 py-2 rounded-xl border">Till resor</a>
+      </div>`;
+  }
+
   swapContent(wrap);
 }
+// <<< PATCH
+
 
 // ---- Planner (unchanged from M3 with TZ fix) ----
 async function renderPlanner({ qs }) {
