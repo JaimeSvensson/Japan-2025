@@ -82,9 +82,10 @@ function navigate(){
   (routes[path] || renderNotFound)({ qs });
 }
 window.addEventListener('hashchange', navigate);
+navigate();
 
-// >>> PATCH: preserve and prefer "next" (e.g. /join?...)
 // ---- Auth state ----
+// >>> PATCH: always prefer saved "next" (e.g., #/join?...) right after login
 onAuthStateChanged(auth, (user) => {
   const nameEl = $('userName');
   if (nameEl) nameEl.textContent = user?.displayName || user?.email || 'Inloggad';
@@ -93,21 +94,32 @@ onAuthStateChanged(auth, (user) => {
   const currentPath = '/' + raw.split('?')[0].replace(/^\/*/, '');
 
   if (!user) {
+    // Utloggad → om vi inte är på /login, spara målet och gå till /login?next=...
     if (currentPath !== '/login') {
       const want = location.hash || '#/trips';
-      setNext(want);
+      sessionStorage.setItem('next', want);
       location.replace(`#/login?next=${encodeURIComponent(want)}`);
       return;
     }
   } else {
-    const saved = readNext();
-    const hasNext = /\bnext=/.test(raw) || !!sessionStorage.getItem('next');
-    if (hasNext && (currentPath === '/login' || currentPath === '/trips')) {
+    // INLOGGAD → hoppa ALLTID till sparad "next" om den finns, oavsett nuvarande path
+    const qs = new URLSearchParams(raw.split('?')[1] || '');
+    const fromUrl = qs.get('next');
+    const saved   = fromUrl ? decodeURIComponent(fromUrl) : sessionStorage.getItem('next');
+
+    if (saved && saved !== '#/trips') {
       sessionStorage.removeItem('next');
       location.replace(saved);
       return;
     }
+
+    // Ingen "next" → om vi står kvar på /login, gå till /trips
+    if (currentPath === '/login') {
+      location.replace('#/trips');
+      return;
+    }
   }
+
   navigate();
 });
 // <<< PATCH
