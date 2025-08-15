@@ -449,6 +449,8 @@ async function renderPlanner({ qs }) {
   const dayKey = (ts)=> dayjs(ts.toDate()).tz(TZ).format('YYYY-MM-DD');
   const dayLabel = (k)=> dayjs.tz(k,'YYYY-MM-DD',TZ).format('dddd D MMMM YYYY');
   const icon = (type)=> ({flight:'✈️',train:'🚄',event:'🎫',other:'📍'}[type]||'📍');
+  const esc = (s) => String(s || '').replace(/[&<>"']/g, m =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;', "'":'&#39;'}[m]));
 
   const form = byId('actForm');
   const formMsg = byId('formMsg');
@@ -515,7 +517,18 @@ async function renderPlanner({ qs }) {
       groups[k].forEach(a=>{
         const li=document.createElement('li');
         li.className='p-3 rounded-2xl border bg-white flex items-center justify-between gap-3';
-        li.innerHTML=`<div class="min-w-0"><div class="font-medium truncate">${icon(a.type)} ${a.title}</div><div class="text-xs text-gray-500">${fmtRange(a.start, a.end)}${a.location ? ' · ' + a.location : ''}</div></div><div class="flex items-center gap-2 shrink-0"><button class="edit px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">📝</button><button class="del px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">🗑️</button></div>`;
+        li.innerHTML = `
+  <div class="min-w-0">
+    <div class="font-medium truncate">${icon(a.type)} ${a.title}</div>
+    <div class="text-xs text-gray-500">
+      ${fmtRange(a.start, a.end)}${a.location ? ' · ' + a.location : ''}
+    </div>
+    ${a.notes ? `<div class="mt-1 text-xs text-gray-600 whitespace-pre-line">${esc(a.notes)}</div>` : ''}
+  </div>
+  <div class="flex items-center gap-2 shrink-0">
+    <button class="edit px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">📝</button>
+    <button class="del px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">🗑️</button>
+  </div>`;
         ul.appendChild(li);
       });
       section.appendChild(ul);
