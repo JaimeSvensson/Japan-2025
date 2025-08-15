@@ -691,7 +691,7 @@ async function renderExpenses({ qs }) {
               </select>
             </label>
             <label class="text-sm col-span-1">Kurs (<span id="rateLabel"></span>)
-              <input id="rate" type="number" step="0.0001" class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="t.ex. 0.073" />
+              <input id="rate" type="number" step="0.001" class="mt-1 w-full rounded-xl border px-3 py-2" placeholder="t.ex. 0.073" />
             </label>
           </div>
           <label class="text-sm">Betalare
@@ -843,7 +843,8 @@ function equalize(){
   if (baseC === 'SEK' && currSel.value === 'JPY') {
     try {
       const rate = await fetchJPYtoSEK();
-      rateInput.value = String(rate);
+      const rounded = Math.round(autoRate.rate * 1000) / 1000;
+      rateInput.value = String(rounded);
       previewBase();
     } catch (err) {
       console.error(err);
@@ -860,7 +861,11 @@ function equalize(){
 
   if (baseC === 'SEK' && currSel.value === 'JPY') {
   fetchJPYtoSEK()
-    .then(rate => { rateInput.value = String(rate); previewBase(); })
+    .then(rate => {
+      const rounded = Math.round(rate * 1000) / 1000;
+      rateInput.value = String(rounded);
+      previewBase();
+    })
     .catch(() => {/* tyst fallback till manuell kurs */});
 }
 
@@ -926,7 +931,9 @@ function equalize(){
           e.amountOriginalMinor / Math.pow(10, dec(e.expenseCurrency || baseC))
         ).toFixed(dec(e.expenseCurrency || baseC));
     
-        byId('rate').value = e.rateToBase || '';
+        byId('rate').value = (typeof e.rateToBase === 'number')
+          ? String(Math.round(e.rateToBase * 1000) / 1000)
+          : (e.rateToBase || '')
         paidBySel.value = e.paidBy;
     
         // Markera inblandade
