@@ -706,8 +706,6 @@ async function renderExpenses({ qs }) {
               <div class="text-sm">Delning
                 <select id="mode" class="ml-2 rounded-xl border px-2 py-1 text-sm">
                   <option value="exact">Exakta belopp</option>
-                  <option value="percent">Procent</option>
-                  <option value="weights">Vikter</option>
                 </select>
                 <button id="equalBtn" type="button" class="ml-2 px-2 py-1 rounded-xl border text-sm">Dela lika</button>
                 <button id="cancelEditBtn" type="button" class="ml-2 px-2 py-1 rounded-xl border text-sm hidden">Avbryt ändring</button>
@@ -767,9 +765,39 @@ async function renderExpenses({ qs }) {
   function updateRateLabel(){ const c=currSel.value; if(c===baseC){ rateLabel.textContent='1:1'; rateInput.disabled=true; rateInput.value=''; } else { rateInput.disabled=false; if(c==='JPY'&&baseC==='SEK') rateLabel.textContent='1 JPY → SEK'; else if(c==='SEK'&&baseC==='JPY') rateLabel.textContent='1 SEK → JPY'; else rateLabel.textContent=`1 ${c} → ${baseC}`; } previewBase(); }
   function previewBase(){ const c=currSel.value; const amt=toMinor(amountInput.value,c); let baseMinor=amt; if(c!==baseC){ const r=Number(rateInput.value||'0'); if(r>0){ const major=amt/Math.pow(10,dec(c)); baseMinor=Math.round(major*r*Math.pow(10,dec(baseC))); } } basePreview.textContent = amt?`≈ ${fmtMoney(baseMinor,baseC)} i ${baseC}`:''; return baseMinor; }
   function getSelectedMembers(){ return Array.from(involvedEl.querySelectorAll('input[type=checkbox]:checked')).map(cb=>cb.value);} 
-  function renderSplitInputs(){ splitArea.innerHTML=''; const sel=getSelectedMembers(); if(sel.length===0){ splitArea.innerHTML='<p class="text-sm text-gray-500">Välj minst en person.</p>'; return;} const mode=modeSel.value; sel.forEach(uid=>{ const row=document.createElement('div'); row.className='grid grid-cols-3 items-center gap-2'; const label=document.createElement('div'); label.className='text-sm'; label.textContent=nameOf(uid); row.appendChild(label); const input=document.createElement('input'); input.className='col-span-2 rounded-xl border px-3 py-2'; input.type='number'; input.step=mode==='percent'?'0.1':'0.01'; input.dataset.uid=uid; input.dataset.kind=mode; input.placeholder=mode==='percent'?'% (t.ex. 25)':(mode==='weights'?'Vikt (t.ex. 1, 2, 3)':`${baseC}`); row.appendChild(input); splitArea.appendChild(row); }); }
-  function equalize(){ const sel=getSelectedMembers(); const inputs=Array.from(splitArea.querySelectorAll('input')); const mode=modeSel.value; if(sel.length===0) return; if(mode==='percent'){ const per=(100/sel.length).toFixed(2); inputs.forEach(i=>i.value=per);} else if(mode==='weights'){ inputs.forEach(i=>i.value='1'); } else { const baseMinor=previewBase(); const share=Math.floor(baseMinor/sel.length); const r=baseMinor-share*sel.length; inputs.forEach((i,idx)=>{ const minor=share+(idx<r?1:0); i.value=(minor/Math.pow(10,dec(baseC))).toFixed(dec(baseC)); }); }}
-  function populateMembersUI(){ paidBySel.innerHTML=''; members.forEach(uid=>{ const opt=document.createElement('option'); opt.value=uid; opt.textContent=nameOf(uid); paidBySel.appendChild(opt); }); involvedEl.innerHTML=''; members.forEach(uid=>{ const lbl=document.createElement('label'); lbl.className='px-2 py-1 rounded-xl border text-sm flex items-center gap-2'; lbl.innerHTML=`<input type="checkbox" value="${uid}" class="peer"> <span>${nameOf(uid)}</span>`; involvedEl.appendChild(lbl); }); involvedEl.querySelectorAll('input[type=checkbox]').forEach(cb=>{ if(cb.value===auth.currentUser.uid) cb.checked=true; }); }
+  function renderSplitInputs(){
+  splitArea.innerHTML='';
+  const sel=getSelectedMembers();
+  if(sel.length===0){ splitArea.innerHTML='<p class="text-sm text-gray-500">Välj minst en person.</p>'; return;}
+  sel.forEach(uid=>{
+    const row=document.createElement('div');
+    row.className='grid grid-cols-3 items-center gap-2';
+    const label=document.createElement('div'); label.className='text-sm'; label.textContent=nameOf(uid); row.appendChild(label);
+    const input=document.createElement('input');
+    input.className='col-span-2 rounded-xl border px-3 py-2';
+    input.type='number';
+    input.dataset.uid = uid;                          
+    input.step = dec(baseC) === 0 ? '1' : '0.01';     
+    input.placeholder = `${baseC}`;  
+    row.appendChild(input);
+    splitArea.appendChild(row);
+  });
+}
+function equalize(){
+  const sel = getSelectedMembers();
+  const inputs = Array.from(splitArea.querySelectorAll('input'));
+  if (sel.length === 0) return;
+
+  const baseMinor = previewBase();
+  const share = Math.floor(baseMinor / sel.length);
+  const r = baseMinor - share * sel.length;
+
+  inputs.forEach((i, idx) => {
+    const minor = share + (idx < r ? 1 : 0);
+    i.value = (minor / Math.pow(10, dec(baseC))).toFixed(dec(baseC));
+  });
+}
+ function populateMembersUI(){ paidBySel.innerHTML=''; members.forEach(uid=>{ const opt=document.createElement('option'); opt.value=uid; opt.textContent=nameOf(uid); paidBySel.appendChild(opt); }); involvedEl.innerHTML=''; members.forEach(uid=>{ const lbl=document.createElement('label'); lbl.className='px-2 py-1 rounded-xl border text-sm flex items-center gap-2'; lbl.innerHTML=`<input type="checkbox" value="${uid}" class="peer"> <span>${nameOf(uid)}</span>`; involvedEl.appendChild(lbl); }); involvedEl.querySelectorAll('input[type=checkbox]').forEach(cb=>{ if(cb.value===auth.currentUser.uid) cb.checked=true; }); }
 
   // Prefill + wire
   const todayTZ = dayjs().tz(TZ).format('YYYY-MM-DD');
@@ -803,8 +831,6 @@ async function renderExpenses({ qs }) {
       const mode = modeSel.value;
       let split={}; const inputs=Array.from(splitArea.querySelectorAll('input'));
       if(mode==='exact'){ let sum=0; inputs.forEach(i=>{ const uid=i.dataset.uid; const m=toMinor(i.value,baseC); split[uid]=m; sum+=m; }); if(sum!==baseMinor) throw new Error('Summan av exakta belopp måste vara lika med totalsumman.'); }
-      else if(mode==='percent'){ let p=0; inputs.forEach(i=>p+=Number(i.value||'0')); if(Math.round(p*100)/100!==100) throw new Error('Procent måste summera till 100.'); const amounts=inputs.map(i=>Math.floor(baseMinor*(Number(i.value||'0')/100))); let sum=amounts.reduce((a,b)=>a+b,0); let r=baseMinor-sum; inputs.forEach((i,idx)=>{ const uid=i.dataset.uid; const add=idx<r?1:0; split[uid]=amounts[idx]+add; }); }
-      else { const weights=inputs.map(i=>Math.max(0,Number(i.value||'0'))); const totalW=weights.reduce((a,b)=>a+b,0); if(totalW<=0) throw new Error('Vikter måste vara > 0.'); const amounts=weights.map(w=>Math.floor(baseMinor*(w/totalW))); let sum=amounts.reduce((a,b)=>a+b,0); let r=baseMinor-sum; inputs.forEach((i,idx)=>{ const uid=i.dataset.uid; const add=idx<r?1:0; split[uid]=amounts[idx]+add; }); }
       const dateTs = Timestamp.fromDate(dayjs.tz(dateStr,'YYYY-MM-DD',TZ).toDate());
       const expense={ title, dateTs, expenseCurrency: expenseC, amountOriginalMinor: toMinor(amountInput.value,expenseC), baseCurrency: baseC, baseAmountMinor: baseMinor, rateToBase: expenseC===baseC?1:Number(rateInput.value||'0'), paidBy, involved: inv, splitMode: mode, splitBase: split, notes: byId('notes').value?.trim()||'', createdBy: auth.currentUser.uid, updatedAt: serverTimestamp() };
       if(editingId){ await updateDoc(doc(db,'trips',tripId,'expenses',editingId), expense);} else { await addDoc(collection(db,'trips',tripId,'expenses'), { ...expense, createdAt: serverTimestamp() }); }
@@ -831,7 +857,47 @@ async function renderExpenses({ qs }) {
       expList.appendChild(li);
     });
     expList.querySelectorAll('button.delExp').forEach(btn=>btn.addEventListener('click', async(ev)=>{ const id=ev.currentTarget.dataset.id; if(!confirm('Ta bort utgiften?')) return; await deleteDoc(doc(db,'trips',tripId,'expenses',id)); }));
-    expList.querySelectorAll('button.editExp').forEach(btn=>btn.addEventListener('click', async(ev)=>{ const id=ev.currentTarget.dataset.id; const s=await getDoc(doc(db,'trips',tripId,'expenses',id)); const e=s.data(); byId('editingExpId').value=id; byId('title').value=e.title||''; dateInput.value=dayjs(e.dateTs.toDate()).tz(TZ).format('YYYY-MM-DD'); byId('curr').value=e.expenseCurrency||baseC; byId('amount').value=(e.amountOriginalMinor/Math.pow(10,dec(e.expenseCurrency||baseC))).toFixed(dec(e.expenseCurrency||baseC)); byId('rate').value=e.rateToBase||''; paidBySel.value=e.paidBy; involvedEl.querySelectorAll('input[type=checkbox]').forEach(cb=> cb.checked=(e.involved||[]).includes(cb.value)); modeSel.value=e.splitMode||'exact'; renderSplitInputs(); const inputs=Array.from(splitArea.querySelectorAll('input')); inputs.forEach(i=>{ const uid=i.dataset.uid; const m=(e.splitBase||{})[uid]||0; if(modeSel.value==='percent') i.value=(m/(e.baseAmountMinor||1)*100).toFixed(2); else if(modeSel.value==='weights') i.value=String(m); else i.value=(m/Math.pow(10,dec(baseC))).toFixed(dec(baseC)); }); byId('notes').value=e.notes||''; byId('cancelEditBtn').classList.remove('hidden'); window.scrollTo({top:0,behavior:'smooth'}); }));
+    expList.querySelectorAll('button.editExp').forEach(btn =>
+      btn.addEventListener('click', async (ev) => {
+        const id = ev.currentTarget.dataset.id;
+        const s = await getDoc(doc(db, 'trips', tripId, 'expenses', id));
+        const e = s.data();
+    
+        byId('editingExpId').value = id;
+        byId('title').value = e.title || '';
+        dateInput.value = dayjs(e.dateTs.toDate()).tz(TZ).format('YYYY-MM-DD');
+        byId('curr').value = e.expenseCurrency || baseC;
+    
+        byId('amount').value = (
+          e.amountOriginalMinor / Math.pow(10, dec(e.expenseCurrency || baseC))
+        ).toFixed(dec(e.expenseCurrency || baseC));
+    
+        byId('rate').value = e.rateToBase || '';
+        paidBySel.value = e.paidBy;
+    
+        // Markera inblandade
+        involvedEl.querySelectorAll('input[type=checkbox]').forEach(cb => {
+          cb.checked = (e.involved || []).includes(cb.value);
+        });
+    
+        // Läge: endast "exakt"
+        modeSel.value = e.splitMode || 'exact';
+    
+        // Bygg split-inputs och fyll med exakta belopp
+        renderSplitInputs();
+        const inputs = Array.from(splitArea.querySelectorAll('input'));
+        inputs.forEach(i => {
+          const uid = i.dataset.uid;
+          const m = (e.splitBase || {})[uid] || 0; // minor i baseC
+          i.value = (m / Math.pow(10, dec(baseC))).toFixed(dec(baseC));
+        });
+    
+        byId('notes').value = e.notes || '';
+        byId('cancelEditBtn').classList.remove('hidden');
+    
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      })
+    );
   }
   function renderSettlements(){
     settlementsList.innerHTML='';
