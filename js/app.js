@@ -85,7 +85,7 @@ window.addEventListener('hashchange', navigate);
 navigate();
 
 // ---- Auth state ----
-// >>> PATCH: always prefer saved "next" (e.g., #/join?...) right after login
+// Alltid prioritera sparad "next" efter login
 onAuthStateChanged(auth, (user) => {
   const nameEl = $('userName');
   if (nameEl) nameEl.textContent = user?.displayName || user?.email || 'Inloggad';
@@ -94,7 +94,6 @@ onAuthStateChanged(auth, (user) => {
   const currentPath = '/' + raw.split('?')[0].replace(/^\/*/, '');
 
   if (!user) {
-    // Utloggad → om vi inte är på /login, spara målet och gå till /login?next=...
     if (currentPath !== '/login') {
       const want = location.hash || '#/trips';
       sessionStorage.setItem('next', want);
@@ -103,7 +102,7 @@ onAuthStateChanged(auth, (user) => {
     }
   } else {
     // INLOGGAD → hoppa ALLTID till sparad "next" om den finns, oavsett nuvarande path
-    const qs = new URLSearchParams(raw.split('?')[1] || '');
+    const qs     = new URLSearchParams(raw.split('?')[1] || '');
     const fromUrl = qs.get('next');
     const saved   = fromUrl ? decodeURIComponent(fromUrl) : sessionStorage.getItem('next');
 
@@ -122,7 +121,6 @@ onAuthStateChanged(auth, (user) => {
 
   navigate();
 });
-// <<< PATCH
 
 // >>> PATCH: authGuard remembers target
 function authGuard(viewFn){
@@ -174,27 +172,24 @@ function renderLogin(){
   e.preventDefault(); msg.textContent='';
   try {
     await signInWithEmailAndPassword(auth, byId('email').value, byId('password').value);
-    const next = readNext();
-sessionStorage.removeItem('next');
-location.replace(next);
+    // Ingen redirect här. onAuthStateChanged sköter omdirigeringen.
+    msg.textContent = 'Inloggad – omdirigerar...';
   } catch(err){ msg.textContent = err.message; }
 });
-  wrap.querySelector('#registerBtn').addEventListener('click', async ()=>{
+ wrap.querySelector('#registerBtn').addEventListener('click', async ()=>{
   msg.textContent='';
   try{
     await createUserWithEmailAndPassword(auth, byId('email').value, byId('password').value);
-    const next = readNext();
-sessionStorage.removeItem('next');
-location.replace(next);
+    // Ingen redirect här. onAuthStateChanged sköter omdirigeringen.
+    msg.textContent = 'Konto skapat – omdirigerar...';
   }catch(err){ msg.textContent = err.message; }
 });
-  wrap.querySelector('#googleBtn').addEventListener('click', async ()=>{
+ wrap.querySelector('#googleBtn').addEventListener('click', async ()=>{
   msg.textContent='';
   try{
     await signInWithPopup(auth, new GoogleAuthProvider());
-    const next = readNext();
-sessionStorage.removeItem('next');
-location.replace(next);
+    // Ingen redirect här. onAuthStateChanged sköter omdirigeringen.
+    msg.textContent = 'Inloggad – omdirigerar...';
   }catch(err){ msg.textContent = err.message; }
 });
   swapContent(wrap);
