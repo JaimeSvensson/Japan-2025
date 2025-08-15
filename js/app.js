@@ -671,7 +671,7 @@ async function renderExpenses({ qs }) {
         </div>
       </div>
       <div class="bg-white rounded-2xl border p-4 space-y-3">
-        <h3 class="font-medium">Ny / Ändra utgift</h3>
+        <h3 class="font-medium">Nytt utlägg</h3>
         <form id="expForm" class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <input type="hidden" id="editingExpId" />
           <label class="text-sm">Titel
@@ -725,12 +725,12 @@ async function renderExpenses({ qs }) {
         </form>
       </div>
       <div class="bg-white rounded-2xl border p-4 space-y-3">
-        <h3 class="font-medium">Utgifter</h3>
+        <h3 class="font-medium">Utlägg</h3>
         <ul id="expList" class="grid gap-2"></ul>
       </div>
       <div class="bg-white rounded-2xl border p-4 space-y-3">
         <div class="flex items-center justify-between">
-          <h3 class="font-medium">Saldo per person</h3>
+          <h3 class="font-medium">Skulder</h3>
           <button id="suggestBtn" class="px-3 py-1 rounded-xl border text-sm">Föreslå överföringar</button>
         </div>
         <div id="balances" class="flex flex-wrap gap-2"></div>
