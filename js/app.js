@@ -28,6 +28,8 @@ import {
 const $ = (id) => document.getElementById(id);
 const addClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.add(cls); };
 const removeClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.remove(cls); };
+const getNext = () => sessionStorage.getItem('next') || '#/trips';
+const setNext = (hash) => sessionStorage.setItem('next', hash?.startsWith('#') ? hash : `#${hash || '/trips'}`);
 
 function toast(message, type = 'success', ms = 2800){
   const host = document.getElementById('toaster');
@@ -66,19 +68,47 @@ function navigate(){
 window.addEventListener('hashchange', navigate);
 
 // ---- Auth state ----
+// >>> PATCH: preserve invite target ("next") across login
 onAuthStateChanged(auth, (user) => {
   const nameEl = $('userName');
   if (nameEl) nameEl.textContent = user?.displayName || user?.email || 'Inloggad';
 
-  // Styr bara routing; rör inte element som ev. inte finns
-  if (user) {
-    if (!location.hash || location.hash === '#/login') location.replace('#/trips');
+  // figure out current path (e.g. /login, /join, /trips)
+  const raw = (location.hash || '#/login').replace(/^#+/, '');
+  const currentPath = '/' + raw.split('?')[0].replace(/^\/*/, '');
+
+  if (!user) {
+    // if logged out and we're not already on /login, remember target and go to /login
+    if (currentPath !== '/login') {
+      setNext(location.hash || '#/trips');
+      location.replace('#/login');
+      return; // stop here; the URL will change
+    }
   } else {
-    if (location.hash !== '#/login') location.replace('#/login');
+    // if logged in and currently on /login, jump to the remembered target
+    if (currentPath === '/login') {
+      const next = getNext(); sessionStorage.removeItem('next');
+      location.replace(next);
+      return; // stop here; the URL will change
+    }
   }
+
+  // otherwise just render current route
   navigate();
 });
-function authGuard(viewFn){ return (ctx={}) => (!auth.currentUser ? renderLogin() : viewFn(ctx)); }
+// <<< PATCH
+
+// >>> PATCH: authGuard remembers target
+function authGuard(viewFn){
+  return (ctx = {}) => {
+    if (!auth.currentUser) {
+      setNext(location.hash || '#/trips'); // <- kom ihåg join-länken
+      return renderLogin();
+    }
+    return viewFn(ctx);
+  };
+}
+// <<< PATCH
 function swapContent(node){ view.innerHTML=''; view.appendChild(node); }
 
 // ---- Utils ----
@@ -114,9 +144,9 @@ function renderLogin(){
       <p id="authMsg" class="text-sm text-red-600 mt-3"></p>
     </section>`;
   const msg = wrap.querySelector('#authMsg');
-  wrap.querySelector('#emailForm').addEventListener('submit', async (e)=>{ e.preventDefault(); msg.textContent=''; try{ await signInWithEmailAndPassword(auth, byId('email').value, byId('password').value); location.hash = '#/trips'; }catch(err){ msg.textContent = err.message; }});
-  wrap.querySelector('#registerBtn').addEventListener('click', async ()=>{ msg.textContent=''; try{ await createUserWithEmailAndPassword(auth, byId('email').value, byId('password').value); location.hash = '#/trips'; }catch(err){ msg.textContent = err.message; }});
-  wrap.querySelector('#googleBtn').addEventListener('click', async ()=>{ msg.textContent=''; try{ await signInWithPopup(auth, new GoogleAuthProvider()); location.hash = '#/trips'; }catch(err){ msg.textContent = err.message; }});
+  wrap.querySelector('#emailForm').addEventListener('submit', async (e)=>{ e.preventDefault(); msg.textContent=''; try{ await signInWithEmailAndPassword(auth, byId('email').value, byId('password').value); const next = getNext(); sessionStorage.removeItem('next'); location.hash = next; }catch(err){ msg.textContent = err.message; }});
+  wrap.querySelector('#registerBtn').addEventListener('click', async ()=>{ msg.textContent=''; try{ await createUserWithEmailAndPassword(auth, byId('email').value, byId('password').value); const next = getNext(); sessionStorage.removeItem('next'); location.hash = next; }catch(err){ msg.textContent = err.message; }});
+  wrap.querySelector('#googleBtn').addEventListener('click', async ()=>{ msg.textContent=''; try{ await signInWithPopup(auth, new GoogleAuthProvider()); const next = getNext(); sessionStorage.removeItem('next'); location.hash = next; }catch(err){ msg.textContent = err.message; }});
   swapContent(wrap);
 }
 
