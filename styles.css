@@ -1,9 +1,12 @@
-/* === Japan2025 — UI Polish Pack === */
+/* === Japan 2025 — Soft Japanese UI === */
 :root{
-  --brand: #0ea5e9;         /* sky-500 */
-  --brand-600: #0284c7;     /* sky-600 */
-  --brand-700: #0369a1;     /* sky-700 */
-  --ring: 0 0 0 3px rgba(14,165,233,.35);
+  /* Palette (mjuka japanska toner) */
+  --brand: #bc002d;         /* hinomaru-röd (primary) */
+  --brand-600: #a50026;     /* hover */
+  --brand-700: #8f001f;     /* active */
+  --ink-strong: #0f2540;    /* indigo för rubriker */
+  --bg-soft: #fff1f4;       /* sakura-ljus rosa */
+  --ring: 0 0 0 3px rgba(188,0,45,.25);
   --card-bg: #ffffff;
   --page-bg: #f8fafc;       /* slate-50 */
   --border: #e5e7eb;        /* gray-200 */
@@ -11,14 +14,22 @@
 }
 
 html,body{scroll-behavior:smooth}
-body{background:var(--page-bg)}
+body{background:var(--page-bg); color:#0f172a}
 
-/* Header with light gradient + blur */
+/* Header med subtil gradient + blur + skugga */
 .app-header{
-  background: linear-gradient(180deg, rgba(14,165,233,.07), rgba(14,165,233,0));
+  background:
+    linear-gradient(180deg, rgba(255,241,244,.65), rgba(255,241,244,0)) ,
+    #ffffff;
   backdrop-filter: saturate(180%) blur(8px);
   -webkit-backdrop-filter: saturate(180%) blur(8px);
+  box-shadow: 0 2px 12px rgba(2,8,23,.04);
 }
+
+/* Header brand */
+.app-logo { letter-spacing: -0.01em; color: var(--ink-strong); }
+.logo-text { color: var(--ink-strong); }
+.flag-jp { display:block; border-radius:3px; box-shadow: 0 0 0 1px rgba(0,0,0,.06) inset; }
 
 /* Cards */
 .card{
@@ -31,26 +42,63 @@ body{background:var(--page-bg)}
 .card:hover{ box-shadow: 0 8px 20px rgba(2,132,199,.10), 0 2px 6px rgba(0,0,0,.04); }
 
 /* Buttons */
-.btn{ display:inline-flex; align-items:center; justify-content:center; gap:.5rem; border-radius:12px; padding:.5rem .75rem; font-weight:500; border:1px solid var(--border); transition: background .15s, box-shadow .15s, transform .05s; }
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:.5rem;
+  border-radius:12px; padding:.5rem .75rem; font-weight:500;
+  border:1px solid var(--border);
+  transition: background .15s, box-shadow .15s, transform .05s;
+}
 .btn:active{ transform: translateY(1px); }
-.btn-primary{ color:#fff; background:var(--brand-600); border-color:transparent; }
-.btn-primary:hover{ background:var(--brand-700); }
+.btn:focus-visible{ outline:none; box-shadow: var(--ring); }
+
+.btn-primary{ color:#fff; background:var(--brand); border-color:transparent; }
+.btn-primary:hover{ background:var(--brand-600); }
+.btn-primary:active{ background:var(--brand-700); }
+
 .btn-outline{ background:#fff; color:#0f172a; }
+.btn-outline:hover{ box-shadow: 0 4px 14px rgba(2, 8, 23, .06); }
 
 /* Inputs */
 input, select, textarea{ border-radius:12px; }
-input:focus-visible, select:focus-visible, textarea:focus-visible{ outline:none; box-shadow: var(--ring); border-color: var(--brand-600); }
+input:focus-visible, select:focus-visible, textarea:focus-visible{
+  outline:none; box-shadow: var(--ring); border-color: var(--brand);
+}
+input, select, textarea{ min-height: 40px; }
 
 /* Small chips (balances) */
-.chip{ display:inline-block; padding:.25rem .625rem; border-radius:999px; font-size:.875rem; border:1px solid var(--border); }
+.chip{
+  display:inline-block; padding:.25rem .625rem; border-radius:999px;
+  font-size:.875rem; border:1px solid var(--border);
+}
 
 /* Toasts */
-#toaster{ position:fixed; inset:auto 0 1rem 0; display:flex; flex-direction:column; gap:.5rem; align-items:center; z-index:9999; pointer-events:none; }
-.toast{ pointer-events:auto; background:#0b1220; color:#fff; border-radius:12px; padding:.625rem .875rem; box-shadow:0 10px 30px rgba(2,8,23,.25); opacity:0; transform:translateY(6px) scale(.98); transition:opacity .18s ease, transform .18s ease; max-width:90vw; }
+#toaster{
+  position:fixed; inset:auto 0 1rem 0; display:flex; flex-direction:column;
+  gap:.5rem; align-items:center; z-index:9999; pointer-events:none;
+}
+.toast{
+  pointer-events:auto; background:#0b1220; color:#fff; border-radius:12px;
+  padding:.625rem .875rem; box-shadow:0 10px 30px rgba(2,8,23,.25);
+  opacity:0; transform:translateY(6px) scale(.98);
+  transition:opacity .18s ease, transform .18s ease; max-width:90vw;
+}
 .toast.show{ opacity:1; transform:translateY(0) scale(1); }
 .toast.success{ background:#065f46; }
 .toast.error{ background:#7f1d1d; }
 
-/* Header brand */
-.app-logo { letter-spacing: -0.01em; }
-.flag-jp { display: block; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,.05) inset; }
+/* Header – användarnamn som chip */
+#userName{
+  display:inline-flex; align-items:center; gap:.375rem;
+  padding:.25rem .5rem; border:1px solid var(--border);
+  border-radius:999px; font-weight:500; color:#0f172a; background:#fff;
+}
+#userName::before{
+  content:""; width:.5rem; height:.5rem; border-radius:999px; background:#10b981;
+}
+
+/* Dag-rubrik (Planner) – om du använder h3 där */
+h3{ color: var(--ink-strong); }
+
+/* Hjälp-klasser om du vill markera aktiva ytor i UI:t */
+.bg-soft{ background: var(--bg-soft); }
+.text-muted{ color: var(--text-muted); }
