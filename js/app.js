@@ -24,6 +24,64 @@ import {
   deleteDoc,
   Timestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+// === ICONS (Lucide inline SVG helper) ===
+// Alla ikoner är 24x24 viewBox, outline, följer textfärgen via 'currentColor'.
+// Använd via i('wallet'), i('users'), i('calendar'), i('link'), i('logout'), i('edit'), i('trash').
+const ICON = {
+  wallet: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+            <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" />
+            <path d="M4 6v12c0 1.1.9 2 2 2h14v-4" />
+            <path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2h4v-4h-4z" />
+          </svg>`,
+  users: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>`,
+  calendar: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+              fill="none" stroke="currentColor" stroke-width="2"
+              stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+              <line x1="16" y1="2" x2="16" y2="6" />
+              <line x1="8" y1="2" x2="8" y2="6" />
+              <line x1="3" y1="10" x2="21" y2="10" />
+            </svg>`,
+  link: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+         </svg>`,
+  logout: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+            fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>`,
+  edit: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+          fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+          <path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z" />
+          <path d="m15 5 4 4" />
+        </svg>`,
+  trash: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
+           fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" class="w-5 h-5">
+           <polyline points="3 6 5 6 21 6" />
+           <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+           <line x1="10" y1="11" x2="10" y2="17" />
+           <line x1="14" y1="11" x2="14" y2="17" />
+         </svg>`
+};
+
+// Helper för att rendera en ikon med extra klasser (t.ex. färg)
+const i = (name, extra = '') => `<span class="${extra}">${ICON[name] || ''}</span>`;
 
 const $ = (id) => document.getElementById(id);
 const addClassSafe = (id, cls) => { const el = $(id); if (el) el.classList.add(cls); };
@@ -233,12 +291,34 @@ function renderTrips(){
           <div class="text-xs text-gray-500">Valuta: ${t.currency || 'SEK'} · TZ: ${t.timezone || 'Asia/Tokyo'}</div>
         </div>
         <div class="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end mt-3 sm:mt-0">
-          <a class="px-3 py-1 rounded-xl border text-sm" href="#/expenses?trip=${docSnap.id}">Utgifter</a>
-          <a class="px-3 py-1 rounded-xl border text-sm" href="#/members?trip=${docSnap.id}">Medlemmar</a>
-          ${canManage ? `<button class="renameTrip px-3 py-1 rounded-xl border text-sm" data-id="${docSnap.id}">Byt namn</button>
-                         <button class="delTrip px-3 py-1 rounded-xl border text-sm" data-id="${docSnap.id}">Ta bort</button>` : ''}
-          <button class="copyInvite px-3 py-1 rounded-xl border text-sm" data-id="${docSnap.id}">Kopiera inbjudan</button>
-        </div>`;
+          <a class="px-2 py-1 rounded-xl border" 
+             href="#/expenses?trip=${docSnap.id}" title="Utgifter" aria-label="Utgifter">
+            ${i('wallet')}
+          </a>
+      
+          <a class="px-2 py-1 rounded-xl border" 
+             href="#/members?trip=${docSnap.id}" title="Medlemmar" aria-label="Medlemmar">
+            ${i('users')}
+          </a>
+      
+          ${canManage ? `
+            <button class="renameTrip px-2 py-1 rounded-xl border" 
+                    data-id="${docSnap.id}" title="Byt namn" aria-label="Byt namn">
+              ${i('edit')}
+            </button>
+      
+            <button class="delTrip px-2 py-1 rounded-xl border text-red-600 border-red-200" 
+                    data-id="${docSnap.id}" title="Ta bort" aria-label="Ta bort">
+              ${i('trash','text-red-600')}
+            </button>
+          ` : ''}
+      
+          <button class="copyInvite px-2 py-1 rounded-xl border text-gray-500 hover:text-gray-700" 
+                  data-id="${docSnap.id}" title="Kopiera inbjudan" aria-label="Kopiera inbjudan">
+            ${i('link')}
+          </button>
+        </div>
+      `;
       list.appendChild(li);
     });
 
@@ -526,9 +606,14 @@ async function renderPlanner({ qs }) {
     ${a.notes ? `<div class="mt-1 text-xs text-gray-600 whitespace-pre-line">${esc(a.notes)}</div>` : ''}
   </div>
   <div class="flex items-center gap-2 shrink-0">
-    <button class="edit px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">📝</button>
-    <button class="del px-3 py-1 rounded-xl border text-sm" data-id="${a.id}">🗑️</button>
-  </div>`;
+  <button class="edit px-2 py-1 rounded-xl border" data-id="${a.id}" title="Redigera" aria-label="Redigera">
+    ${i('edit')}
+  </button>
+  <button class="del px-2 py-1 rounded-xl border text-red-600 border-red-200" data-id="${a.id}" title="Ta bort" aria-label="Ta bort">
+    ${i('trash','text-red-600')}
+  </button>
+</div>
+  `;
         ul.appendChild(li);
       });
       section.appendChild(ul);
@@ -616,8 +701,11 @@ async function renderMembers({ qs }){
           <div class="font-medium truncate">${data.displayName || '(namn saknas)'}${muid===uid?' (du)':''}</div>
         </div>
         <div class="shrink-0">
-          ${canEdit?`<button class="edit px-3 py-1 rounded-xl border text-sm" data-uid="${muid}">Ändra</button>`:''}
-        </div>`;
+          ${canEdit?`<button class="edit px-2 py-1 rounded-xl border" data-uid="${muid}" title="Ändra" aria-label="Ändra">
+            ${i('edit')}
+          </button>`:''}
+        </div>
+        `;
       list.appendChild(li);
     });
     list.querySelectorAll('button.edit').forEach(btn=>btn.addEventListener('click', async(e)=>{
@@ -666,8 +754,12 @@ async function renderExpenses({ qs }) {
         <a href="#/trips" class="text-sm text-gray-600 hover:underline">← Resor</a>
         <h2 class="text-xl font-semibold">${trip.name || 'Resa'} – Utgifter</h2>
         <div class="flex items-center gap-2">
-          <a href="#/planner?trip=${tripId}" class="text-sm px-3 py-1 rounded-xl border">Planner</a>
-          <a href="#/members?trip=${tripId}" class="text-sm px-3 py-1 rounded-xl border">Medlemmar</a>
+          <a href="#/planner?trip=${tripId}" class="px-2 py-1 rounded-xl border" title="Planner" aria-label="Planner">
+            ${i('calendar')}
+          </a>
+          <a href="#/members?trip=${tripId}" class="px-2 py-1 rounded-xl border" title="Medlemmar" aria-label="Medlemmar">
+            ${i('users')}
+          </a>
         </div>
       </div>
       <div class="bg-white rounded-2xl border p-4 space-y-3">
@@ -911,9 +1003,14 @@ function equalize(){
           <div class="text-xs text-gray-500">${dateStr} · Betalat: ${nameOf(e.paidBy)} · Summa: ${fmtMoney(e.baseAmountMinor, baseC)} ${e.expenseCurrency!==baseC?`(orig ${fmtMoney(e.amountOriginalMinor,e.expenseCurrency)} @${e.rateToBase})`:''}</div>
         </div>
         <div class="flex items-center gap-2 shrink-0">
-          <button class="editExp px-3 py-1 rounded-xl border text-sm" data-id="${e.id}">📝</button>
-          <button class="delExp px-3 py-1 rounded-xl border text-sm" data-id="${e.id}">🗑️</button>
-        </div>`;
+          <button class="editExp px-2 py-1 rounded-xl border" data-id="${e.id}" title="Redigera" aria-label="Redigera">
+            ${i('edit')}
+          </button>
+          <button class="delExp px-2 py-1 rounded-xl border text-red-600 border-red-200" data-id="${e.id}" title="Ta bort" aria-label="Ta bort">
+            ${i('trash','text-red-600')}
+          </button>
+        </div>
+        `;
       expList.appendChild(li);
     });
     expList.querySelectorAll('button.delExp').forEach(btn=>btn.addEventListener('click', async(ev)=>{ const id=ev.currentTarget.dataset.id; if(!confirm('Ta bort utgiften?')) return; await deleteDoc(doc(db,'trips',tripId,'expenses',id)); }));
