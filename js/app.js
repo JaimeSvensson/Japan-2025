@@ -679,7 +679,7 @@ async function renderMembers({ qs }){
     <section class="space-y-4">
       <div class="flex items-center justify-between">
         <a href="#/trips" class="text-sm text-gray-600 hover:underline">← Resor</a>
-        <h2 class="text-xl font-semibold">${trip.name || 'Resa'} – Medlemmar</h2>
+        <h2 class="text-xl font-semibold">Medlemmar</h2>
         <span></span>
       </div>
       <ul id="list" class="grid gap-2"></ul>
@@ -754,7 +754,7 @@ async function renderExpenses({ qs }) {
     <section class="space-y-4">
       <div class="flex items-center justify-between">
         <a href="#/trips" class="text-sm text-gray-600 hover:underline">← Resor</a>
-        <h2 class="text-xl font-semibold">${trip.name || 'Resa'} – Utgifter</h2>
+        <h2 class="text-xl font-semibold">Utgifter</h2>
         <div class="flex items-center gap-2">
           <a href="#/planner?trip=${tripId}" class="px-2 py-1 rounded-xl border" title="Planner" aria-label="Planner">
             ${i('calendar')}
