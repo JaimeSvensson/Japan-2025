@@ -459,10 +459,12 @@ async function renderPlanner({ qs }) {
   wrap.innerHTML = `
     <section class="space-y-4">
       <div class="flex items-center justify-between">
-        <a href="#/trips" class="text-sm text-gray-600 hover:underline">← Tillbaka</a>
-        <h2 class="text-xl font-semibold">${trip.name || 'Resa'}</h2>
-        <a href="#/expenses?trip=${tripId}" class="text-sm px-3 py-1 rounded-xl border">Utgifter</a>
-      </div>
+      <a href="#/trips" class="text-sm text-gray-600 hover:underline">← Tillbaka</a>
+      <h2 class="text-xl font-semibold">${trip.name || 'Resa'}</h2>
+      <a href="#/expenses?trip=${tripId}" class="px-2 py-1 rounded-xl border" title="Utgifter" aria-label="Utgifter">
+        ${i('wallet')}
+      </a>
+    </div>
       <div class="bg-white rounded-2xl border p-4 space-y-3">
         <h3 class="font-medium">Lägg till/ändra aktivitet</h3>
         <form id="actForm" class="grid grid-cols-1 md:grid-cols-2 gap-3">
