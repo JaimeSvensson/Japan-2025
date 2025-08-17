@@ -117,3 +117,13 @@ input, select, textarea{ min-height: 40px; }
 /* Headings in content */
 h2, h3{ color: var(--ink-strong); }
 .text-muted{ color: var(--text-muted); }
+
+/* === Responsive/Fluid tweaks === */
+h2 { font-size: clamp(1.125rem, 1rem + 1vw, 1.5rem); }
+h3 { font-size: clamp(1rem, .95rem + .6vw, 1.25rem); }
+
+/* Mindre padding på riktigt små skärmar */
+@media (max-width: 640px){
+  .btn { padding: .45rem .6rem; }
+}
+
