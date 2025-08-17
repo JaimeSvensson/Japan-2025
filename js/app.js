@@ -204,7 +204,7 @@ function renderTrips(){
         <h2 class="text-xl font-semibold">Dina resor</h2>
         <button id="newTripBtn" class="px-3 py-2 rounded-xl bg-black text-white">Ny resa</button>
       </div>
-      <ul id="tripList" class="grid gap-3"></ul>
+      <ul id="tripList" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"></ul>
       <p id="tripMsg" class="text-sm text-red-600"></p>
     </section>`;
 
@@ -226,13 +226,13 @@ function renderTrips(){
       const t = docSnap.data();
       const canManage = (t.admins||[]).includes(uid) || t.createdBy === uid; // creator/admin only
       const li = document.createElement('li');
-      li.className = 'p-4 rounded-2xl border bg-white flex items-center justify-between gap-3';
+      li.className = 'p-4 rounded-2xl border bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3';
       li.innerHTML = `
         <div class="min-w-0">
           <a class="font-medium hover:underline block truncate" href="#/planner?trip=${docSnap.id}">${t.name ?? 'Namnlös resa'}</a>
           <div class="text-xs text-gray-500">Valuta: ${t.currency || 'SEK'} · TZ: ${t.timezone || 'Asia/Tokyo'}</div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap gap-2 w-full sm:w-auto sm:justify-end mt-3 sm:mt-0">
           <a class="px-3 py-1 rounded-xl border text-sm" href="#/expenses?trip=${docSnap.id}">Utgifter</a>
           <a class="px-3 py-1 rounded-xl border text-sm" href="#/members?trip=${docSnap.id}">Medlemmar</a>
           ${canManage ? `<button class="renameTrip px-3 py-1 rounded-xl border text-sm" data-id="${docSnap.id}">Byt namn</button>
@@ -516,7 +516,7 @@ async function renderPlanner({ qs }) {
       const ul=document.createElement('ul'); ul.className='grid gap-2';
       groups[k].forEach(a=>{
         const li=document.createElement('li');
-        li.className='p-3 rounded-2xl border bg-white flex items-center justify-between gap-3';
+        li.className='p-3 rounded-2xl border bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3';
         li.innerHTML = `
   <div class="min-w-0">
     <div class="font-medium truncate">${icon(a.type)} ${a.title}</div>
@@ -607,8 +607,8 @@ async function renderMembers({ qs }){
     list.innerHTML='';
     memberIds.forEach(muid=>{
       const data = map[muid] || { displayName: '', email: '' };
-      const li = document.createElement('li');
-      li.className='p-3 rounded-2xl border bg-white flex items-center justify-between gap-3';
+      const li=document.createElement('li'); 
+      li.className='p-3 rounded-2xl border bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3';
       const canEdit = (muid===uid) || (trip.admins||[]).includes(uid);
       li.innerHTML = `
         <div class="min-w-0">
